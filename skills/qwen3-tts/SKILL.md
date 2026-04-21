@@ -1,6 +1,6 @@
 ---
 name: qwen3-tts
-version: 1.3.0
+version: 1.4.0
 description: >
   Run Qwen3-TTS text-to-speech locally on Apple Silicon (MLX preferred)
   or GPU/CPU (PyTorch). Supports voice cloning, voice design, and preset
@@ -407,27 +407,103 @@ python scripts/curate.py export SPEAKER_ID --name carlos_mx --accent mexico --ge
 16. **VoiceDesign instruct prompts should stay in ENGLISH, not the target language** — the model was trained primarily on English/Chinese voice descriptions. Writing instructs in Spanish causes severe gender confusion (male->female, female->male) and anime-like artifacts. Use English instructs + explicit `lang_code="spanish"` for best results. Even so, VoiceDesign produces "American TTS reading Spanish" prosody for most voices — only ~1 in 4 designs sounds near-native. For reliable native accent, always prefer voice cloning (Base model + reference audio).
 17. **VoiceDesign is unreliable for non-English/Chinese native accents** — the model fundamentally cannot produce native Spanish (or likely other non-English) prosody from text descriptions alone. Clone voices using real speaker audio are far superior for accent fidelity. Use VoiceDesign only as a fallback when no reference audio is available, and expect English-accented output.
 18. **qwen-tts (PyTorch) conflicts with mlx-audio/mlx-lm** — The official `qwen-tts` pip package pins `transformers==4.57.3`, but `mlx-audio`/`mlx-lm` require `transformers>=5.0.0`. They cannot coexist. On Apple Silicon using MLX, do NOT install `qwen-tts` — it's the CUDA/PyTorch path and unnecessary. If accidentally installed, remove with `pip uninstall qwen-tts`.
+19. **conda run --no-banner incompatible with conda 25.x** — The `--no-banner` flag does not exist in conda 25.5.1+. If you see `conda: error: unrecognized arguments: --no-banner` in stderr, remove the flag. This affects any code calling `conda run` in a subprocess, not just spanish-tts. The hermes-agent provider was patched to remove it. Always use `conda run -n <env> <command>` without `--no-banner`.
+20. **WAV-to-MP3 rename vs convert** — `spanish-tts say` always outputs WAV (PCM). Never use `os.rename()` or `shutil.move()` to change the extension to .mp3. Always convert with ffmpeg: `ffmpeg -y -i input.wav -acodec libmp3lame -b:a 128k output.mp3`. A renamed WAV will have wrong magic bytes (`RIFF` header instead of MP3 framing) and may break downstream tools (Telegram Opus conversion, media players expecting MP3 framing, any format-sniffing code).
 
 ## Hermes Native TTS Provider Integration
 
-Qwen3-TTS can replace Edge TTS as the default Hermes TTS provider so that
-`text_to_speech(text=...)` uses it directly — no terminal() calls needed.
+The `qwen3tts` provider in hermes-agent's `tools/tts_tool.py` wraps the `spanish-tts`
+CLI so that `text_to_speech(text=...)` uses Qwen3-TTS directly.
 
-Provider function added to `tools/tts_tool.py` following the NeuTTS pattern
-(subprocess via `conda run -n qwen3-tts spanish-tts say`).
+**The agent does NOT need to use terminal() manually.** Just call `text_to_speech()`
+and it works.
 
-Config in config.yaml:
+### Pipeline
+
+```
+text_to_speech() → _generate_qwen3tts() → conda run → spanish-tts say → WAV → ffmpeg → MP3/OGG
+```
+
+### Configuration
+
+In hermes `config.yaml`:
+
 ```yaml
 tts:
   provider: qwen3tts
   qwen3tts:
-    voice: carlos_mx      # default male voice
-    conda_env: qwen3-tts
+    voice: carlos_mx       # male Mexican Spanish (default)
+    speed: 1.0             # synthesis speed multiplier
+    conda_env: qwen3-tts   # conda environment name
 ```
 
-Recommended voice defaults: Male = carlos_mx, Female = lucia_es.
-Outputs WAV, auto-converted to Opus for Telegram voice bubbles via ffmpeg.
-Edge TTS remains available as fallback by changing provider back to edge.
+### Key details
+
+- Uses `conda run -n qwen3-tts` to invoke `spanish-tts say` (no conda activate needed)
+- 120-second subprocess timeout (MLX on M1/M2/M3 Max takes ~15-30s for typical paragraphs)
+- Checks both exit code and output file existence/size before returning
+- Handles WAV→MP3 conversion via ffmpeg when the caller requests .mp3 output
+- After generation, the caller's Opus conversion logic handles WAV/MP3→OGG for Telegram voice bubbles
+- Edge TTS remains available as fallback by changing `provider` back to `edge`
+
+### Patch documentation
+
+The provider is a local modification to `tools/tts_tool.py`. It will be lost on
+`hermes update`. See `references/tts_tool_provider_patch.md` in this skill for the
+full code and re-application instructions.
+
+## Troubleshooting text_to_speech() with qwen3tts Provider
+
+### Provider returns success but audio is wrong voice or silent
+
+1. Check conda env exists: `conda env list | grep qwen3-tts`
+2. Test CLI directly: `conda run -n qwen3-tts spanish-tts say -v carlos_mx -o /tmp/test.wav "Hola mundo"`
+3. Check the WAV: `file /tmp/test.wav` — should show `RIFF ... WAVE audio`
+4. If `conda run` fails, check conda version: `conda --version` (25.x removed `--no-banner` — see pitfall 19)
+
+### Provider silently falls back to Edge TTS
+
+The caller in `tts_tool.py` has a broad try/except. If `_generate_qwen3tts` raises an
+exception, some code paths may fall through to Edge TTS without logging. Check hermes
+logs for "Qwen3-TTS" vs "Edge TTS" in the log output to confirm which provider was
+actually used.
+
+### Telegram sends audio but it doesn't play as voice bubble
+
+Telegram requires Opus-in-OGG for voice bubbles. The provider auto-converts via
+`_convert_to_opus()` after generation. If this fails, the MP3 is sent as a document
+instead. Ensure ffmpeg is installed with libopus support:
+
+```bash
+ffmpeg -codecs | grep opus
+```
+
+### Output file has .mp3 extension but is actually WAV
+
+This means the ffmpeg WAV→MP3 conversion failed and the code fell back to renaming.
+Check that ffmpeg has libmp3lame:
+
+```bash
+ffmpeg -codecs | grep mp3lame
+```
+
+See pitfall 20 for details.
+
+## Voice Selection for Hermes Agent
+
+When the user asks for audio in Spanish without specifying a voice:
+- **Default**: `carlos_mx` (male, Mexican Spanish, most tested)
+- **Female voice**: use `lucia_es` when the user says "voz femenina" or context implies female voice
+
+To list all available voices:
+
+```bash
+conda run -n qwen3-tts spanish-tts list
+```
+
+The voice is set in config.yaml under `tts.qwen3tts.voice`, but the agent can also
+invoke `spanish-tts` directly via `terminal()` with `-v <voice_name>` for one-off
+voice changes without modifying the config.
 
 ## Sources
 
