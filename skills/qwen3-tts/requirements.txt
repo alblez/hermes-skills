@@ -1,5 +1,7 @@
 # Qwen3-TTS MLX inference dependencies
-mlx-audio>=0.3.0
-mlx-lm>=0.30.0
+# Last verified: mlx-audio 0.4.2, mlx-lm 0.31.1, transformers 5.5.4 (Apr 2026)
+mlx-audio>=0.3.0,<1.0
+mlx-lm>=0.30.0,<1.0
+transformers>=5.0.0
 numpy
 soundfile
