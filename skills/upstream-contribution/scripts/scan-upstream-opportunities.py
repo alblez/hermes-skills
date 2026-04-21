@@ -18,11 +18,12 @@ import re
 import sys
 import urllib.request
 import urllib.error
+import time
 from functools import lru_cache
 
 GITHUB_API = "https://api.github.com"
 TOKEN = os.environ.get("GITHUB_TOKEN", "")
-DEFAULT_USER = "alblez"
+DEFAULT_USER = os.environ.get("GITHUB_USER", "alblez")
 
 # Known upstream mappings: topic -> upstream GitHub repo
 TOPIC_TO_UPSTREAM = {
@@ -60,12 +61,22 @@ def api_get(path, accept="application/vnd.github+json"):
     url = f"{GITHUB_API}{path}" if path.startswith("/") else path
     req = urllib.request.Request(url)
     req.add_header("Accept", accept)
+    req.add_header("User-Agent", "hermes-upstream-scanner")
     if TOKEN:
         req.add_header("Authorization", f"token {TOKEN}")
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return json.loads(resp.read())
-    except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError):
+            body = resp.read()
+            try:
+                return json.loads(body)
+            except json.JSONDecodeError:
+                print(f"[warn] non-JSON response from {url}: {body[:200]}", file=sys.stderr)
+                return None
+    except urllib.error.HTTPError as e:
+        print(f"[warn] HTTP {e.code} from {url}", file=sys.stderr)
+        return None
+    except urllib.error.URLError as e:
+        print(f"[warn] request failed for {url}: {e.reason}", file=sys.stderr)
         return None
 
 
@@ -79,6 +90,7 @@ def get_user_repos(user):
             break
         repos.extend(data)
         page += 1
+        time.sleep(0.5)  # Rate-limit awareness: throttle between paginated requests
         if len(data) < 100:
             break
     return [r for r in repos if not r.get("fork") and not r.get("private")]
@@ -96,12 +108,14 @@ def get_readme_content(owner, repo):
     url = f"{GITHUB_API}/repos/{owner}/{repo}/readme"
     req = urllib.request.Request(url)
     req.add_header("Accept", "application/vnd.github.v3.raw")
+    req.add_header("User-Agent", "hermes-upstream-scanner")
     if TOKEN:
         req.add_header("Authorization", f"token {TOKEN}")
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             return resp.read().decode("utf-8", errors="replace")
-    except Exception:
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError) as e:
+        print(f"[warn] README fetch failed for {owner}/{repo}: {e}", file=sys.stderr)
         return ""
 
 
@@ -172,6 +186,8 @@ def analyze_upstream(upstream_owner, upstream_repo, our_repo_name):
         "community project", "ecosystem", "built with", "projects using",
         "third.party", "integration", "extension", "plugin", "awesome",
     ]
+    # NOTE: 'third.party' is intentional regex — dot matches any separator
+    # (third-party, third party, third_party). Other keywords are literal.
     has_section = any(re.search(kw, readme_lower) for kw in keywords)
 
     return mentioned, has_section

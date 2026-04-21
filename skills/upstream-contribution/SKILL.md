@@ -129,7 +129,7 @@ The companion cron job uses this logic to detect opportunities:
 4. Check if your project is already listed
 5. Flag repos where you could contribute but haven't yet
 
-See: ~/.hermes/scripts/scan-upstream-opportunities.py
+See: scripts/scan-upstream-opportunities.py (relative to this skill's directory)
 
 ## Cron Job Setup
 
@@ -146,7 +146,7 @@ cron job that feeds its stdout into an agent prompt. Key setup details:
 
 ## Novelty Note
 
-As of 2026-04, no existing tool automates upstream ecosystem contributions. Building
+As of 2026-04, no widely-known tool automates upstream ecosystem contributions. Building
 blocks exist (github-dependents-info for discovery, peter-evans/create-pull-request for
 PR automation, ecosyste.ms for dependency mapping) but nobody has assembled the full
 "detect derivative project and contribute back upstream" workflow. This skill and scan
