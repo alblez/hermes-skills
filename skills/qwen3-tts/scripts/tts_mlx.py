@@ -144,9 +144,9 @@ def generate_voice_clone(text: str, ref_audio: str, ref_text: str,
     model = get_model(model_id)
 
     print(f"Cloning voice from: {ref_audio}")
-    results = model.generate_voice_clone(
+    results = model.generate(
         text=text,
-        language=language,
+        lang_code=language.lower(),
         ref_audio=ref_audio,
         ref_text=ref_text,
     )

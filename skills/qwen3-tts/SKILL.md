@@ -297,9 +297,10 @@ audio_np = np.array(first_result.audio)
 sf.write("out.wav", audio_np, model.sample_rate)
 ```
 
-**WRONG methods** (do NOT use):
-- `model.generate_voice_clone()` — does NOT exist
-- `model.generate_voice_design()` — exists but `model.generate(instruct=...)` is preferred
+**Method availability** (mlx-audio API):
+- `model.generate_voice_clone()` — does NOT exist; use `model.generate(ref_audio=..., ref_text=...)` instead
+- `model.generate_voice_design()` — exists and works; `model.generate(instruct=...)` also works as an alternative
+- `model.generate_custom_voice()` — exists and works; the standard method for preset speakers
 
 ## Spanish Voices (qwen3-tts-spanish-voices)
 
@@ -309,16 +310,19 @@ VoxForge Spanish (Creative Commons). Design voices use natural language descript
 
 ### Prerequisites
 
-Requires the qwen3-tts conda env already set up (Step 1 above). Then:
+Requires the qwen3-tts conda env already set up (Step 1 above). Then install from the repo directory:
 
 ```bash
 conda activate qwen3-tts
+cd ~/Code/spanish-tts   # or the path configured in qwen3-tts.spanish-tts-path
 pip install -e ".[mlx]"
 ```
 
 Run from the repo path configured in `qwen3-tts.spanish-tts-path` (default: `~/Code/spanish-tts`).
 
 ### Quick Reference
+
+Requires the `qwen3-tts` conda env to be active (`conda activate qwen3-tts`).
 
 ```bash
 # Generate speech with a specific voice
@@ -398,7 +402,7 @@ python scripts/curate.py export SPEAKER_ID --name carlos_mx --accent mexico --ge
 11. **The `--instruct` flag**: controls emotion/prosody for CustomVoice, is REQUIRED for VoiceDesign
 12. **datasets v4.8+ requires torchcodec for audio decoding** — if torch is not installed, use `ds.with_format("arrow")` then decode raw bytes with soundfile: `sf.read(io.BytesIO(row.column("audio")[0].as_py()["bytes"]))`
 13. **lang_code uses "auto" or lowercase full words** ("english", "chinese") — NOT "English" or "Spanish"
-14. **speed parameter is built into generate()** — no need for sample rate manipulation
+14. **speed parameter accepted but not yet functional** — `model.generate()` accepts `speed=` but silently ignores it (docstring: "not directly supported yet"). The bundled script adjusts the sample rate as a workaround. Do not rely on the API's speed parameter.
 15. **VoiceDesign with lang_code="auto" produces English accent** — "auto" skips the codec language token entirely, so the model defaults to English prosody (especially when the instruct prompt is in English). ALWAYS pass explicit `lang_code="spanish"` (or target language) for VoiceDesign. Clone mode is not affected because the reference audio provides the acoustic prior.
 16. **VoiceDesign instruct prompts should stay in ENGLISH, not the target language** — the model was trained primarily on English/Chinese voice descriptions. Writing instructs in Spanish causes severe gender confusion (male->female, female->male) and anime-like artifacts. Use English instructs + explicit `lang_code="spanish"` for best results. Even so, VoiceDesign produces "American TTS reading Spanish" prosody for most voices — only ~1 in 4 designs sounds near-native. For reliable native accent, always prefer voice cloning (Base model + reference audio).
 17. **VoiceDesign is unreliable for non-English/Chinese native accents** — the model fundamentally cannot produce native Spanish (or likely other non-English) prosody from text descriptions alone. Clone voices using real speaker audio are far superior for accent fidelity. Use VoiceDesign only as a fallback when no reference audio is available, and expect English-accented output.
