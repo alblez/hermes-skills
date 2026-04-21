@@ -5,16 +5,17 @@ description: >
   Contribute your derivative project back to the upstream OSS project it builds on.
   Detects upstream relationships, forks the upstream repo, adds your project to their
   ecosystem/community section, and opens a PR. Also finds relevant awesome lists.
-tags: [github, open-source, upstream, contribution, ecosystem, community, pr]
-triggers:
-  - contribute upstream
-  - add to upstream readme
-  - open source contribution
-  - ecosystem PR
-  - community projects section
-  - tell upstream about my project
-  - submit to awesome list
-related_skills: [github-auth, github-pr-workflow, github-repo-management]
+author: Alberto Gonzalez Rouille
+license: Apache-2.0
+metadata:
+  hermes:
+    tags: [github, open-source, upstream, contribution, ecosystem, community, pr]
+    related_skills: [github-auth, github-pr-workflow, github-repo-management]
+required_environment_variables:
+  - name: GITHUB_TOKEN
+    prompt: "GitHub personal access token"
+    help: "Classic token with public_repo scope. Fine-grained tokens scoped to your repos only will FAIL on external repos (403). Create one at https://github.com/settings/tokens"
+    required_for: "forking upstream repos, opening PRs, scanning repos"
 ---
 
 # Upstream OSS Contribution
@@ -129,11 +130,11 @@ The companion cron job uses this logic to detect opportunities:
 4. Check if your project is already listed
 5. Flag repos where you could contribute but haven't yet
 
-See: scripts/scan-upstream-opportunities.py (relative to this skill's directory)
+See: `${HERMES_SKILL_DIR}/scripts/scan-upstream-opportunities.py`
 
 ## Cron Job Setup
 
-The companion script `scripts/scan-upstream-opportunities.py` is designed to run as a
+The companion script `${HERMES_SKILL_DIR}/scripts/scan-upstream-opportunities.py` is designed to run as a
 cron job that feeds its stdout into an agent prompt. Key setup details:
 
 - Copy script to the Hermes scripts directory for cron access
@@ -173,3 +174,11 @@ script is the first implementation. No need to search for alternatives — itera
     "is my project mentioned?" and "does a community section exist?". The script uses
     lru_cache on get_readme_content() and a combined analyze_upstream() function to
     avoid double-fetching. Maintain this pattern if modifying the script
+
+## Verification
+
+- PR was created successfully on the upstream repo (check GitHub API response or browser URL)
+- The added entry matches the upstream's existing table format (if any)
+- CONTRIBUTING.md guidelines were followed
+- No duplicate PRs exist for the same project
+- Scan script output lists the opportunity as "already contributed" on the next run
