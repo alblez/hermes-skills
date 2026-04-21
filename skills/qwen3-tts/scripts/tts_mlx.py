@@ -21,6 +21,7 @@ Requirements:
 """
 
 import argparse
+import math
 import os
 import sys
 from datetime import datetime
@@ -102,7 +103,7 @@ def generate_custom_voice(text: str, speaker: str, language: str,
 
     # Apply speed adjustment via resampling if needed
     sample_rate = model.sample_rate
-    if speed != 1.0:
+    if not math.isclose(speed, 1.0):
         # Adjust sample rate to simulate speed change
         effective_sr = int(sample_rate * speed)
         sf.write(output_path, audio_np, effective_sr)
@@ -161,6 +162,30 @@ def generate_voice_clone(text: str, ref_audio: str, ref_text: str,
     return output_path
 
 
+def resolve_speaker(language: str, speaker_arg: str | None) -> str:
+    """Resolve speaker from argument or language default."""
+    lang_key = next(
+        (k for k in DEFAULT_SPEAKERS if k.lower() == language.lower()), None
+    )
+    if lang_key:
+        return speaker_arg or DEFAULT_SPEAKERS.get(lang_key, "Ryan")
+    return speaker_arg or "Ryan"
+
+
+def validate_args(args):
+    """Validate argument combinations and warn on unsupported options."""
+    if not math.isclose(args.speed, 1.0) and args.mode != "custom-voice":
+        print(f"WARNING: --speed is only supported in custom-voice mode, ignoring speed={args.speed}", file=sys.stderr)
+    if args.mode == "voice-design" and not args.instruct:
+        print("ERROR: --instruct is required for voice-design mode", file=sys.stderr)
+        sys.exit(1)
+    if args.mode == "voice-clone" and not args.ref_audio:
+        print("ERROR: --ref-audio is required for voice-clone mode", file=sys.stderr)
+        sys.exit(1)
+    if args.mode == "voice-clone" and not args.ref_text:
+        print("WARNING: --ref-text not provided, quality may degrade", file=sys.stderr)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Qwen3-TTS MLX Inference")
     parser.add_argument("text", help="Text to synthesize")
@@ -177,17 +202,10 @@ def main():
     parser.add_argument("--ref-text", default=None, help="Transcript of reference audio")
 
     args = parser.parse_args()
+    validate_args(args)
 
-    # Warn if --speed is used with modes that don't support it
-    if args.speed != 1.0 and args.mode != "custom-voice":
-        print(f"WARNING: --speed is only supported in custom-voice mode, ignoring speed={args.speed}", file=sys.stderr)
-
-    # Resolve model
     model_id = args.model or os.environ.get("QWEN_TTS_MODEL") or DEFAULT_MODELS[args.mode]
-
-    # Resolve speaker (case-insensitive language lookup)
-    lang_key = next((k for k in DEFAULT_SPEAKERS if k.lower() == args.language.lower()), None)
-    speaker = args.speaker or DEFAULT_SPEAKERS.get(lang_key, "Ryan") if lang_key else args.speaker or "Ryan"
+    speaker = resolve_speaker(args.language, args.speaker)
 
     if args.mode == "custom-voice":
         generate_custom_voice(
@@ -196,19 +214,11 @@ def main():
             output=args.output,
         )
     elif args.mode == "voice-design":
-        if not args.instruct:
-            print("ERROR: --instruct is required for voice-design mode", file=sys.stderr)
-            sys.exit(1)
         generate_voice_design(
             text=args.text, instruct=args.instruct, language=args.language,
             model_id=model_id, output=args.output,
         )
     elif args.mode == "voice-clone":
-        if not args.ref_audio:
-            print("ERROR: --ref-audio is required for voice-clone mode", file=sys.stderr)
-            sys.exit(1)
-        if not args.ref_text:
-            print("WARNING: --ref-text not provided, quality may degrade", file=sys.stderr)
         generate_voice_clone(
             text=args.text, ref_audio=args.ref_audio,
             ref_text=args.ref_text or "", language=args.language,
