@@ -5,7 +5,7 @@ A collection of reusable skills for [Hermes Agent](https://github.com/NousResear
 ## Available Skills
 
 | Skill | Description |
-|-------|-------------|
+| --- | --- |
 | [qwen3-tts](skills/qwen3-tts/) | Run Qwen3-TTS text-to-speech locally on Apple Silicon (MLX) or GPU/CPU (PyTorch). Supports custom voices, voice design, and voice cloning. 10 languages, 3-second voice cloning, emotional control. |
 | [upstream-contribution](skills/upstream-contribution/) | Contribute your derivative project back to the upstream OSS project it builds on. Detects upstream relationships, forks the upstream repo, adds your project to their ecosystem/community section, and opens a PR. Also finds relevant awesome lists. |
 
@@ -32,7 +32,7 @@ cp -r hermes-skills/skills/qwen3-tts ~/.hermes/skills/
 
 ## Structure
 
-```
+```text
 hermes-skills/
 ├── .gitignore
 ├── README.md
