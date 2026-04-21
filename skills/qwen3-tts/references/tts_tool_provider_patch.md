@@ -92,19 +92,30 @@ Add this function to `tools/tts_tool.py` (around line 686, before `text_to_speec
 ```python
 def _generate_qwen3tts(text: str, output_path: str, tts_config: dict) -> str:
     """Generate speech using Qwen3-TTS via spanish-tts CLI (conda subprocess)."""
+    import re
+    import shutil
     import subprocess
-    import tempfile
+    from pathlib import Path
 
     qwen3_cfg = tts_config.get("qwen3tts", {})
     voice = qwen3_cfg.get("voice", "carlos_mx")
-    speed = qwen3_cfg.get("speed", 1.0)
+    speed = float(qwen3_cfg.get("speed", 1.0))
     conda_env = qwen3_cfg.get("conda_env", "qwen3-tts")
 
+    # Input validation
+    if not re.match(r'^[a-zA-Z0-9_-]+$', conda_env):
+        raise ValueError(f"Invalid conda_env name: {conda_env!r}")
+    if not re.match(r'^[a-zA-Z0-9_-]+$', voice):
+        raise ValueError(f"Invalid voice name: {voice!r}")
+    if not (0.25 <= speed <= 4.0):
+        raise ValueError(f"Speed out of range (0.25-4.0): {speed}")
+
     # spanish-tts always outputs WAV; we convert afterward if needed
-    if output_path.endswith(".wav"):
-        wav_path = output_path
+    output = Path(output_path)
+    if output.suffix == ".wav":
+        wav_path = str(output)
     else:
-        wav_path = output_path.rsplit(".", 1)[0] + ".wav"
+        wav_path = str(output.with_suffix(".wav"))
 
     cmd = [
         "conda", "run", "-n", conda_env,
@@ -113,7 +124,7 @@ def _generate_qwen3tts(text: str, output_path: str, tts_config: dict) -> str:
         "-o", wav_path,
     ]
 
-    if speed != 1.0:
+    if not math.isclose(speed, 1.0):
         cmd.extend(["--speed", str(speed)])
 
     # Text goes last as positional argument
@@ -125,6 +136,11 @@ def _generate_qwen3tts(text: str, output_path: str, tts_config: dict) -> str:
             capture_output=True,
             text=True,
             timeout=120,  # MLX on M1 Max takes ~15-30s for typical paragraphs
+        )
+    except FileNotFoundError:
+        raise RuntimeError(
+            "Qwen3-TTS: 'conda' not found on PATH. "
+            "Install Miniconda/Miniforge or ensure conda is on PATH."
         )
     except subprocess.TimeoutExpired:
         raise RuntimeError("Qwen3-TTS: synthesis timed out after 120 seconds")
@@ -142,14 +158,23 @@ def _generate_qwen3tts(text: str, output_path: str, tts_config: dict) -> str:
 
     # Convert WAV to target format if needed
     if wav_path != output_path:
-        convert_result = subprocess.run(
-            ["ffmpeg", "-y", "-i", wav_path, "-acodec", "libmp3lame",
-             "-b:a", "128k", output_path],
-            capture_output=True, timeout=30,
-        )
+        try:
+            convert_result = subprocess.run(
+                ["ffmpeg", "-y", "-i", wav_path, "-acodec", "libmp3lame",
+                 "-b:a", "128k", output_path],
+                capture_output=True, timeout=30,
+            )
+        except FileNotFoundError:
+            raise RuntimeError(
+                "Qwen3-TTS: 'ffmpeg' not found. Install with: brew install ffmpeg"
+            )
         if convert_result.returncode != 0:
-            # Fallback: just rename (WAV with wrong extension, but at least audible)
-            os.rename(wav_path, output_path)
+            # Fallback: move WAV to output path (wrong extension but audible)
+            logger.warning(
+                f"ffmpeg WAV→MP3 failed (exit {convert_result.returncode}), "
+                f"returning WAV with {output.suffix} extension"
+            )
+            shutil.move(wav_path, output_path)
         else:
             os.remove(wav_path)
 
