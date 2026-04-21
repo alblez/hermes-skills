@@ -11,6 +11,11 @@ platforms: [macos, linux]
 metadata:
   hermes:
     tags: [tts, speech, voice-cloning, voice-design, mlx, apple-silicon, qwen]
+    config:
+      - key: qwen3-tts.spanish-tts-path
+        description: "Path to the qwen3-tts-spanish-voices repository clone"
+        default: "~/Code/spanish-tts"
+        prompt: "Spanish TTS repo path"
 required_environment_variables:
   - name: QWEN_TTS_OUTPUT_DIR
     prompt: "Output directory for generated audio files"
@@ -241,6 +246,8 @@ For languages without a preset speaker, use one of these approaches:
 Note: The Alibaba Cloud DashScope API offers 49 timbres with broader language coverage
 (including Dolce for Italian), but the open-source model is limited to these 9.
 
+For a curated library of Spanish voices with a dedicated CLI, see the **Spanish Voices** section below.
+
 ## Performance Notes
 
 - **RTF (Real-Time Factor)**: ~3.0 on M3 Max for 1.7B PyTorch (slower than real-time)
@@ -294,20 +301,87 @@ sf.write("out.wav", audio_np, model.sample_rate)
 - `model.generate_voice_clone()` — does NOT exist
 - `model.generate_voice_design()` — exists but `model.generate(instruct=...)` is preferred
 
-## Spanish Voice References
+## Spanish Voices (qwen3-tts-spanish-voices)
 
-The `ciempiess/voxforge_spanish` HuggingFace dataset (21,692 samples) provides good
-clone references. Countries available: spain (16K), argentina (1.7K), latin_america (1.6K),
-mexico (758), chile (719). No Colombian speakers.
+The [qwen3-tts-spanish-voices](https://github.com/alblez/qwen3-tts-spanish-voices) project
+provides a dedicated CLI for Spanish TTS with curated voices. Clone voices sourced from
+VoxForge Spanish (Creative Commons). Design voices use natural language descriptions.
 
-## Companion Project: qwen3-tts-spanish-voices
+### Prerequisites
 
-The [qwen3-tts-spanish-voices](https://github.com/alblez/qwen3-tts-spanish-voices) repo
-provides 14 pre-curated Spanish voices (12 clones + 2 designs) as a ready-to-use CLI tool.
-Clone voices cover: Spain, Mexico, Argentina, Ibero-America (neutral LatAm), Chile.
-Design voices kept only where near-native quality achieved (neutral_male, energetic_male).
-Install it with `pip install -e ".[mlx]"` and use `spanish-tts say "Hola"` for quick generation.
-Local path: `~/Code/spanish-tts` (or `~/Code/qwen3-tts-spanish-voices` if renamed on disk).
+Requires the qwen3-tts conda env already set up (Step 1 above). Then:
+
+```bash
+conda activate qwen3-tts
+pip install -e ".[mlx]"
+```
+
+Run from the repo path configured in `qwen3-tts.spanish-tts-path` (default: `~/Code/spanish-tts`).
+
+### Quick Reference
+
+```bash
+# Generate speech with a specific voice
+spanish-tts say "Hola, bienvenidos al programa." --voice neutral_male --play
+
+# List all available voices
+spanish-tts list
+
+# Generate with ALL voices for side-by-side comparison
+spanish-tts demo "Texto de prueba para comparar voces."
+
+# Options
+spanish-tts say "Texto." --voice carlos_mx --speed 1.1 --output ~/tts-output/custom.wav
+```
+
+### Shipped Voices
+
+Four design voices are available out of the box (no reference audio needed):
+
+| Voice | Gender | Description |
+|-------|--------|-------------|
+| `neutral_male` (default) | Male | Neutral, clear Latin American accent |
+| `neutral_female` | Female | Neutral, clear Latin American accent |
+| `energetic_male` | Male | Energetic, cheerful tone |
+| `warm_female` | Female | Warm, comforting tone |
+
+Clone voices (better accent fidelity) require running the curation pipeline below.
+
+### Managing Voices
+
+```bash
+# Add a clone voice from reference audio (5-10s, clean, no background noise)
+spanish-tts add-ref carlos_mx /path/to/audio.wav "Transcripción exacta del audio." \
+  --accent mexico --gender male
+
+# Add a design voice from a text description
+spanish-tts add-design narrator "A calm 40-year-old male narrator" --gender male
+
+# Remove a voice
+spanish-tts remove carlos_mx
+```
+
+Voice registry lives at `~/.spanish-tts/voices.yaml`. Reference audio is copied to `~/.spanish-tts/references/`.
+
+### Curation Pipeline (Adding Clone Voices from VoxForge)
+
+Run from the spanish-tts repo directory to source clone voices from the
+`ciempiess/voxforge_spanish` HuggingFace dataset (21,692 samples — Spain, Argentina,
+Mexico, Chile, Latin America):
+
+```bash
+# Browse dataset stats by country/gender
+python scripts/curate.py browse
+
+# Find best speakers for a country/gender
+python scripts/curate.py pick --country mexico --gender male
+
+# Preview a speaker's clips
+python scripts/curate.py listen SPEAKER_ID
+
+# Export best clip as a voice (registers in voices.yaml automatically)
+python scripts/curate.py export SPEAKER_ID --name carlos_mx --accent mexico --gender male
+```
 
 ## Pitfalls
 
