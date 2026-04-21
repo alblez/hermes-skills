@@ -406,6 +406,28 @@ python scripts/curate.py export SPEAKER_ID --name carlos_mx --accent mexico --ge
 15. **VoiceDesign with lang_code="auto" produces English accent** — "auto" skips the codec language token entirely, so the model defaults to English prosody (especially when the instruct prompt is in English). ALWAYS pass explicit `lang_code="spanish"` (or target language) for VoiceDesign. Clone mode is not affected because the reference audio provides the acoustic prior.
 16. **VoiceDesign instruct prompts should stay in ENGLISH, not the target language** — the model was trained primarily on English/Chinese voice descriptions. Writing instructs in Spanish causes severe gender confusion (male->female, female->male) and anime-like artifacts. Use English instructs + explicit `lang_code="spanish"` for best results. Even so, VoiceDesign produces "American TTS reading Spanish" prosody for most voices — only ~1 in 4 designs sounds near-native. For reliable native accent, always prefer voice cloning (Base model + reference audio).
 17. **VoiceDesign is unreliable for non-English/Chinese native accents** — the model fundamentally cannot produce native Spanish (or likely other non-English) prosody from text descriptions alone. Clone voices using real speaker audio are far superior for accent fidelity. Use VoiceDesign only as a fallback when no reference audio is available, and expect English-accented output.
+18. **qwen-tts (PyTorch) conflicts with mlx-audio/mlx-lm** — The official `qwen-tts` pip package pins `transformers==4.57.3`, but `mlx-audio`/`mlx-lm` require `transformers>=5.0.0`. They cannot coexist. On Apple Silicon using MLX, do NOT install `qwen-tts` — it's the CUDA/PyTorch path and unnecessary. If accidentally installed, remove with `pip uninstall qwen-tts`.
+
+## Hermes Native TTS Provider Integration
+
+Qwen3-TTS can replace Edge TTS as the default Hermes TTS provider so that
+`text_to_speech(text=...)` uses it directly — no terminal() calls needed.
+
+Provider function added to `tools/tts_tool.py` following the NeuTTS pattern
+(subprocess via `conda run -n qwen3-tts spanish-tts say`).
+
+Config in config.yaml:
+```yaml
+tts:
+  provider: qwen3tts
+  qwen3tts:
+    voice: carlos_mx      # default male voice
+    conda_env: qwen3-tts
+```
+
+Recommended voice defaults: Male = carlos_mx, Female = lucia_es.
+Outputs WAV, auto-converted to Opus for Telegram voice bubbles via ffmpeg.
+Edge TTS remains available as fallback by changing provider back to edge.
 
 ## Sources
 
