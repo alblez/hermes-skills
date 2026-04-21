@@ -131,10 +131,11 @@ hf download Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice \
 
 ### MLX — Custom Voice (Preset Speakers)
 
-Use the bundled script: `${HERMES_SKILL_DIR}/scripts/tts_mlx.py`
+Use the bundled script: `scripts/tts_mlx.py` (relative to this skill's directory;
+the full path is shown by `skill_view()` when loaded, e.g. `~/.hermes/skills/qwen3-tts/scripts/tts_mlx.py`).
 
 ```bash
-python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Hello, this is a test!" \
+python scripts/tts_mlx.py "Hello, this is a test!" \
   --speaker Ryan --language English --speed 1.0 \
   --output ~/tts-output/test.wav
 ```
@@ -148,7 +149,7 @@ Available speakers:
 ### MLX — Voice Design
 
 ```bash
-python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Welcome to the future of AI." \
+python scripts/tts_mlx.py "Welcome to the future of AI." \
   --mode voice-design \
   --instruct "A deep, calm male narrator with a British accent" \
   --language English \
@@ -158,7 +159,7 @@ python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Welcome to the future of AI." \
 ### MLX — Voice Cloning
 
 ```bash
-python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Text to speak in cloned voice." \
+python scripts/tts_mlx.py "Text to speak in cloned voice." \
   --mode voice-clone \
   --ref-audio /path/to/reference.wav \
   --ref-text "Transcript of the reference audio." \
@@ -223,12 +224,12 @@ For languages without a preset speaker, use one of these approaches:
 
 1. **Cross-lingual with existing speaker** — use Ryan or Vivian with `--language Spanish`:
    ```bash
-   python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Hola, ¿cómo estás?" --speaker Ryan --language Spanish
+   python scripts/tts_mlx.py "Hola, ¿cómo estás?" --speaker Ryan --language Spanish
    ```
 
 2. **Voice Design** — describe the desired voice in natural language:
    ```bash
-   python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Hola, bienvenidos." \
+   python scripts/tts_mlx.py "Hola, bienvenidos." \
      --mode voice-design \
      --instruct "A warm 30-year-old Colombian male with a calm, friendly tone" \
      --language Spanish
@@ -236,7 +237,7 @@ For languages without a preset speaker, use one of these approaches:
 
 3. **Voice Clone** — provide a 5-10s reference audio of a native speaker:
    ```bash
-   python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Texto en español." \
+   python scripts/tts_mlx.py "Texto en español." \
      --mode voice-clone \
      --ref-audio /path/to/spanish_speaker.wav \
      --ref-text "Transcripción del audio de referencia." \
