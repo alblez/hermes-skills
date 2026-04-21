@@ -114,7 +114,7 @@ def get_readme_content(owner, repo):
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             return resp.read().decode("utf-8", errors="replace")
-    except OSError as e:
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError) as e:
         print(f"[warn] README fetch failed for {owner}/{repo}: {e}", file=sys.stderr)
         return ""
 
