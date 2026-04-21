@@ -1,6 +1,6 @@
 ---
 name: qwen3-tts
-version: 1.0.0
+version: 1.2.0
 description: >
   Run Qwen3-TTS text-to-speech locally on Apple Silicon (MLX preferred)
   or GPU/CPU (PyTorch). Supports voice cloning, voice design, and preset
@@ -183,6 +183,10 @@ ffprobe output.wav         # Check format/duration
 
 ## Preset Speakers Reference
 
+The open-source CustomVoice model has only 9 preset speakers. No Spanish, Portuguese,
+German, French, Russian, or Italian preset speakers exist — but the model supports
+synthesizing text in all 10 languages using any speaker (cross-lingual).
+
 | Speaker | Language | Style |
 |---------|----------|-------|
 | Vivian | Chinese | Bright, clear |
@@ -195,6 +199,35 @@ ffprobe output.wav         # Check format/duration
 | Ono_Anna | Japanese | Natural female |
 | Sohee | Korean | Natural female |
 
+### Spanish (and other unsupported-preset languages)
+
+For languages without a preset speaker, use one of these approaches:
+
+1. **Cross-lingual with existing speaker** — use Ryan or Vivian with `--language Spanish`:
+   ```bash
+   python scripts/tts_mlx.py "Hola, ¿cómo estás?" --speaker Ryan --language Spanish
+   ```
+
+2. **Voice Design** — describe the desired voice in natural language:
+   ```bash
+   python scripts/tts_mlx.py "Hola, bienvenidos." \
+     --mode voice-design \
+     --instruct "A warm 30-year-old Colombian male with a calm, friendly tone" \
+     --language Spanish
+   ```
+
+3. **Voice Clone** — provide a 5-10s reference audio of a native speaker:
+   ```bash
+   python scripts/tts_mlx.py "Texto en español." \
+     --mode voice-clone \
+     --ref-audio /path/to/spanish_speaker.wav \
+     --ref-text "Transcripción del audio de referencia." \
+     --language Spanish
+   ```
+
+Note: The Alibaba Cloud DashScope API offers 49 timbres with broader language coverage
+(including Dolce for Italian), but the open-source model is limited to these 9.
+
 ## Performance Notes
 
 - **RTF (Real-Time Factor)**: ~3.0 on M3 Max for 1.7B PyTorch (slower than real-time)
@@ -202,6 +235,66 @@ ffprobe output.wav         # Check format/duration
 - 0.6B models are ~3x faster than 1.7B with some quality tradeoff
 - First run on MPS/MLX is slower due to kernel compilation (29% improvement by run 3)
 - For faster-than-realtime TTS, consider F5-TTS (0.64 RTF) as alternative
+
+## MLX API Reference (mlx-audio)
+
+The unified `model.generate()` method handles all modes:
+
+```python
+from mlx_audio.tts import load_model
+
+model = load_model("mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit")
+
+# Voice cloning (Base model)
+results = model.generate(
+    text="Texto a sintetizar.",
+    lang_code="auto",        # auto-detects language from text
+    ref_audio="/path/to/reference.wav",
+    ref_text="Transcripción exacta del audio de referencia.",
+    speed=1.0,
+)
+
+# Voice design (VoiceDesign model)
+# IMPORTANT: always pass explicit lang_code for non-English targets
+# Keep instruct in English — Spanish instructs cause gender/quality issues
+results = model.generate(
+    text="Texto en español.",
+    lang_code="spanish",     # NEVER use "auto" — causes English accent
+    instruct="A warm 30-year-old male with calm tone",
+    speed=1.0,
+)
+
+# Custom voice (CustomVoice model)
+results = model.generate_custom_voice(
+    text="Hello!",
+    speaker="Ryan",
+    language="english",      # full word, lowercase
+)
+
+# All return generators:
+first_result = next(iter(results))
+audio_np = np.array(first_result.audio)
+sf.write("out.wav", audio_np, model.sample_rate)
+```
+
+**WRONG methods** (do NOT use):
+- `model.generate_voice_clone()` — does NOT exist
+- `model.generate_voice_design()` — exists but `model.generate(instruct=...)` is preferred
+
+## Spanish Voice References
+
+The `ciempiess/voxforge_spanish` HuggingFace dataset (21,692 samples) provides good
+clone references. Countries available: spain (16K), argentina (1.7K), latin_america (1.6K),
+mexico (758), chile (719). No Colombian speakers.
+
+## Companion Project: qwen3-tts-spanish-voices
+
+The [qwen3-tts-spanish-voices](https://github.com/alblez/qwen3-tts-spanish-voices) repo
+provides 14 pre-curated Spanish voices (12 clones + 2 designs) as a ready-to-use CLI tool.
+Clone voices cover: Spain, Mexico, Argentina, Ibero-America (neutral LatAm), Chile.
+Design voices kept only where near-native quality achieved (neutral_male, energetic_male).
+Install it with `pip install -e ".[mlx]"` and use `spanish-tts say "Hola"` for quick generation.
+Local path: `~/Code/spanish-tts` (or `~/Code/qwen3-tts-spanish-voices` if renamed on disk).
 
 ## Pitfalls
 
@@ -211,11 +304,17 @@ ffprobe output.wav         # Check format/duration
 4. **sox must be installed** — `brew install sox` or audio processing will fail
 5. **First inference is slow** — kernel compilation warmup, subsequent runs faster
 6. **MLX models need exact folder names** — HuggingFace repo name must match local dir name
-9. **mlx-audio returns generators, not lists** — use `next(iter(results))` not `results[0]`
-10. **huggingface-cli is deprecated** — use `hf download` instead
-11. **Warnings about tokenizer regex and model type are harmless** — they don't affect generation quality
-7. **For voice cloning**: reference audio should be 5-10s, clean (no background noise)
-8. **The `--instruct` flag**: controls emotion/prosody for CustomVoice, is REQUIRED for VoiceDesign
+7. **mlx-audio returns generators, not lists** — use `next(iter(results))` not `results[0]`
+8. **huggingface-cli is deprecated** — use `hf download` instead
+9. **Warnings about tokenizer regex and model type are harmless** — they don't affect generation quality
+10. **For voice cloning**: reference audio should be 5-10s, clean (no background noise)
+11. **The `--instruct` flag**: controls emotion/prosody for CustomVoice, is REQUIRED for VoiceDesign
+12. **datasets v4.8+ requires torchcodec for audio decoding** — if torch is not installed, use `ds.with_format("arrow")` then decode raw bytes with soundfile: `sf.read(io.BytesIO(row.column("audio")[0].as_py()["bytes"]))`
+13. **lang_code uses "auto" or lowercase full words** ("english", "chinese") — NOT "English" or "Spanish"
+14. **speed parameter is built into generate()** — no need for sample rate manipulation
+15. **VoiceDesign with lang_code="auto" produces English accent** — "auto" skips the codec language token entirely, so the model defaults to English prosody (especially when the instruct prompt is in English). ALWAYS pass explicit `lang_code="spanish"` (or target language) for VoiceDesign. Clone mode is not affected because the reference audio provides the acoustic prior.
+16. **VoiceDesign instruct prompts should stay in ENGLISH, not the target language** — the model was trained primarily on English/Chinese voice descriptions. Writing instructs in Spanish causes severe gender confusion (male->female, female->male) and anime-like artifacts. Use English instructs + explicit `lang_code="spanish"` for best results. Even so, VoiceDesign produces "American TTS reading Spanish" prosody for most voices — only ~1 in 4 designs sounds near-native. For reliable native accent, always prefer voice cloning (Base model + reference audio).
+17. **VoiceDesign is unreliable for non-English/Chinese native accents** — the model fundamentally cannot produce native Spanish (or likely other non-English) prosody from text descriptions alone. Clone voices using real speaker audio are far superior for accent fidelity. Use VoiceDesign only as a fallback when no reference audio is available, and expect English-accented output.
 
 ## Sources
 
