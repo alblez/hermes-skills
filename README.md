@@ -51,7 +51,7 @@ hermes-skills/
 
 ## Contributing
 
-Each skill lives in its own directory under `skills/` and must contain a `SKILL.md` with YAML frontmatter. See the [Hermes Agent docs](https://hermes-agent.nousresearch.com/docs/) for the skill format.
+Each skill lives in its own directory under `skills/` and must contain a `SKILL.md` with YAML frontmatter. See the [Creating Skills](https://hermes-agent.nousresearch.com/docs/developer-guide/creating-skills) guide for the skill format.
 
 ## License
 
