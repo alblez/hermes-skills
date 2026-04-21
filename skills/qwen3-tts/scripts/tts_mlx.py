@@ -2,6 +2,8 @@
 """
 Qwen3-TTS MLX Inference Script for Apple Silicon.
 
+Last verified: mlx-audio 0.4.2, mlx-lm 0.31.1, transformers 5.5.4 (Apr 2026)
+
 Supports three modes:
   - custom-voice: Use preset speakers with emotion/style control
   - voice-design: Create voices from natural language descriptions
@@ -17,7 +19,7 @@ Environment Variables:
   QWEN_TTS_MODEL       - Model ID override (default depends on mode)
 
 Requirements:
-  pip install "mlx-audio>=0.3.0" "mlx-lm>=0.30.0" numpy soundfile
+  pip install "mlx-audio>=0.3.0,<1.0" "mlx-lm>=0.30.0,<1.0" "transformers>=5.0.0" numpy soundfile
 """
 
 import argparse
@@ -32,6 +34,8 @@ import soundfile as sf
 
 
 # Default models per mode
+# Community quantizations — may be renamed/removed upstream.
+# If model loading fails, check mlx-community on HuggingFace for current IDs.
 DEFAULT_MODELS = {
     "custom-voice": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
     "voice-design": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
@@ -48,6 +52,22 @@ DEFAULT_SPEAKERS = {
 
 # Cache loaded model
 _model_cache = {}
+
+# Tested library versions — warn if different
+_TESTED_VERSIONS = {"mlx-audio": "0.4.2", "mlx-lm": "0.31.1"}
+
+
+def check_versions():
+    """Warn if library versions differ from tested."""
+    import importlib.metadata
+    for pkg, tested_ver in _TESTED_VERSIONS.items():
+        try:
+            actual = importlib.metadata.version(pkg)
+            if actual != tested_ver:
+                print(f"WARNING: {pkg} {actual} (tested with {tested_ver})", file=sys.stderr)
+        except importlib.metadata.PackageNotFoundError:
+            print(f"ERROR: {pkg} not installed. Run: pip install {pkg}", file=sys.stderr)
+            sys.exit(1)
 
 
 def get_output_dir():
@@ -104,7 +124,10 @@ def generate_custom_voice(text: str, speaker: str, language: str,
     # Apply speed adjustment via resampling if needed
     sample_rate = model.sample_rate
     if not math.isclose(speed, 1.0):
-        # Adjust sample rate to simulate speed change
+        # Workaround: mlx-audio's speed parameter is not yet functional.
+        # Adjusting sample rate simulates speed but also shifts pitch.
+        print(f"  WARNING: Speed via sample rate change — pitch will shift. "
+              f"True speed control not yet supported by mlx-audio.", file=sys.stderr)
         effective_sr = int(sample_rate * speed)
         sf.write(output_path, audio_np, effective_sr)
         print(f"  Saved: {output_path} (sr={effective_sr}, speed={speed}x)")
@@ -202,6 +225,7 @@ def main():
     parser.add_argument("--ref-text", default=None, help="Transcript of reference audio")
 
     args = parser.parse_args()
+    check_versions()
     validate_args(args)
 
     model_id = args.model or os.environ.get("QWEN_TTS_MODEL") or DEFAULT_MODELS[args.mode]
