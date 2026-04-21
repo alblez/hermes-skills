@@ -271,7 +271,6 @@ results = model.generate(
     lang_code="auto",        # auto-detects language from text
     ref_audio="/path/to/reference.wav",
     ref_text="Transcripción exacta del audio de referencia.",
-    speed=1.0,
 )
 
 # Voice design (VoiceDesign model)
@@ -281,7 +280,6 @@ results = model.generate(
     text="Texto en español.",
     lang_code="spanish",     # NEVER use "auto" — causes English accent
     instruct="A warm 30-year-old male with calm tone",
-    speed=1.0,
 )
 
 # Custom voice (CustomVoice model)

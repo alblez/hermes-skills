@@ -87,7 +87,7 @@ def generate_custom_voice(text: str, speaker: str, language: str,
     kwargs = {
         "text": text,
         "speaker": speaker,
-        "language": language,
+        "language": language.lower(),
     }
     if instruct:
         kwargs["instruct"] = instruct
@@ -124,7 +124,7 @@ def generate_voice_design(text: str, instruct: str, language: str,
     print(f"Generating voice design: instruct='{instruct[:50]}...'")
     results = model.generate_voice_design(
         text=text,
-        language=language,
+        language=language.lower(),
         instruct=instruct,
     )
 
@@ -177,6 +177,10 @@ def main():
     parser.add_argument("--ref-text", default=None, help="Transcript of reference audio")
 
     args = parser.parse_args()
+
+    # Warn if --speed is used with modes that don't support it
+    if args.speed != 1.0 and args.mode != "custom-voice":
+        print(f"WARNING: --speed is only supported in custom-voice mode, ignoring speed={args.speed}", file=sys.stderr)
 
     # Resolve model
     model_id = args.model or os.environ.get("QWEN_TTS_MODEL") or DEFAULT_MODELS[args.mode]
