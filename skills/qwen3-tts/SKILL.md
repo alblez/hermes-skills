@@ -1,6 +1,6 @@
 ---
 name: qwen3-tts
-version: 1.4.0
+version: 1.5.0
 description: >
   Run Qwen3-TTS text-to-speech locally on Apple Silicon (MLX preferred)
   or GPU/CPU (PyTorch). Supports voice cloning, voice design, and preset
@@ -47,11 +47,90 @@ Sizes: 1.7B (best quality) and 0.6B (faster, lighter)
 - User wants to design a custom voice from a natural language description
 - User needs multilingual speech synthesis (especially CJK + European languages)
 
+## Hermes Agent Quick Reference
+
+### Primary method: terminal()
+
+For Spanish TTS, use `terminal()` directly — no patching or setup beyond the conda env:
+
+```bash
+conda run -n qwen3-tts spanish-tts say -v carlos_mx -o /tmp/output.wav "Texto en español"
+```
+
+To convert WAV to MP3 (for non-Telegram delivery):
+```bash
+conda run -n qwen3-tts spanish-tts say -v carlos_mx -o /tmp/out.wav "Texto" && \
+  ffmpeg -y -i /tmp/out.wav -acodec libmp3lame -b:a 128k /tmp/out.mp3
+```
+
+For Telegram voice bubbles (Opus-in-OGG):
+```bash
+conda run -n qwen3-tts spanish-tts say -v carlos_mx -o /tmp/out.wav "Texto" && \
+  ffmpeg -y -i /tmp/out.wav -c:a libopus -b:a 64k /tmp/out.ogg
+```
+
+### Alternative: text_to_speech() (requires provider patch)
+
+If the `qwen3tts` provider has been patched into `tts_tool.py` (see "Advanced"
+section below), `text_to_speech(text="...")` works directly with no terminal()
+calls needed. If the provider is not configured, Hermes uses Edge TTS instead.
+
+### Voice selection
+
+- **Default (male)**: `carlos_mx` — Mexican Spanish, most tested
+- **Female voice**: `lucia_es` — use when the user says "voz femenina" or context implies female
+- **List all voices**: `conda run -n qwen3-tts spanish-tts list`
+- For one-off voice changes, pass `-v <voice_name>` in the terminal() command
+
+### For non-Spanish languages
+
+Use the bundled MLX script directly (the `spanish-tts` CLI is Spanish-only):
+
+```bash
+conda run -n qwen3-tts python scripts/tts_mlx.py "Hello world!" \
+  --speaker Ryan --language English -o /tmp/english.wav
+```
+
+Script path: `scripts/tts_mlx.py` relative to this skill directory
+(e.g. `~/.hermes/skills/qwen3-tts/scripts/tts_mlx.py`).
+
+## Troubleshooting
+
+### TTS command produces no output or wrong voice
+
+1. Check conda env exists: `conda env list | grep qwen3-tts`
+2. Test CLI directly: `conda run -n qwen3-tts spanish-tts say -v carlos_mx -o /tmp/test.wav "Hola mundo"`
+3. Check the WAV: `file /tmp/test.wav` — should show `RIFF ... WAVE audio`
+4. If `conda run` fails, check conda version: `conda --version` (25.x removed `--no-banner` — see pitfall 19)
+
+### text_to_speech() silently falls back to Edge TTS
+
+If the `qwen3tts` provider is patched but failing, `tts_tool.py`'s broad try/except
+may fall through to Edge TTS without logging. Check hermes logs for "Qwen3-TTS" vs
+"Edge TTS" to confirm which provider was actually used.
+
+### Telegram sends audio but it doesn't play as voice bubble
+
+Telegram requires Opus-in-OGG. Ensure ffmpeg has libopus: `ffmpeg -codecs | grep opus`.
+If using terminal() directly, convert to OGG before sending (see Quick Reference above).
+
+### Output file has .mp3 extension but is actually WAV
+
+ffmpeg WAV-to-MP3 conversion failed and the code fell back to renaming.
+Check that ffmpeg has libmp3lame: `ffmpeg -codecs | grep mp3lame`. See pitfall 20.
+
+---
+
+## Setup & Reference Material
+
+Everything below is for environment setup, manual CLI usage, and advanced configuration.
+The agent's primary workflow is covered in the Quick Reference above.
+
 ## Approach Selection
 
 ### Apple Silicon (M1/M2/M3/M4) — Use MLX (Recommended)
 - 2-3GB RAM vs 10+GB for PyTorch
-- 40-50°C vs 80-90°C CPU temperature
+- 40-50C vs 80-90C CPU temperature
 - Quantized models (8-bit or 4-bit) available
 - Uses `mlx-audio` framework
 
@@ -64,22 +143,16 @@ Sizes: 1.7B (best quality) and 0.6B (faster, lighter)
 - Works but slower and heavier than MLX
 - `device_map="mps"`, `dtype=torch.bfloat16`
 - Do NOT use float16 or cpu — will hang or be extremely slow
-
----
+- See `references/pytorch_mps_example.md` for code example
 
 ## Step 1: Environment Setup
 
 ### MLX Approach (Apple Silicon)
 
 ```bash
-# Create isolated environment
 conda create -n qwen3-tts python=3.12 -y
 conda activate qwen3-tts
-
-# Install MLX dependencies
-pip install "mlx-audio>=0.3.0" "mlx-lm>=0.30.0" numpy soundfile
-
-# System dependency
+pip install "mlx-audio>=0.3.0,<1.0" "mlx-lm>=0.30.0,<1.0" "transformers>=5.0.0" numpy soundfile
 brew install sox ffmpeg
 ```
 
@@ -88,13 +161,9 @@ brew install sox ffmpeg
 ```bash
 conda create -n qwen3-tts python=3.12 -y
 conda activate qwen3-tts
-
-# Official package
 pip install -U qwen-tts
-
 # For CUDA only (NOT available on Apple Silicon):
 # pip install -U flash-attn --no-build-isolation
-
 brew install sox ffmpeg
 ```
 
@@ -112,13 +181,11 @@ Available on HuggingFace under `mlx-community/`:
 | Base 1.7B (Clone) | mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit | mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit |
 | Base 0.6B (Clone) | mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit | mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit |
 
-Download manually:
+Models auto-download on first use. Manual download:
 ```bash
 hf download mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit \
   --local-dir ~/Models/qwen3-tts/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit
 ```
-
-Models auto-download on first use if not pre-cached.
 
 ### PyTorch Models
 
@@ -127,12 +194,9 @@ hf download Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice \
   --local-dir ~/Models/qwen3-tts/Qwen3-TTS-12Hz-1.7B-CustomVoice
 ```
 
-## Step 3: Generate Speech
+## Step 3: Generate Speech (CLI)
 
 ### MLX — Custom Voice (Preset Speakers)
-
-Use the bundled script: `scripts/tts_mlx.py` (relative to this skill's directory;
-the full path is shown by `skill_view()` when loaded, e.g. `~/.hermes/skills/qwen3-tts/scripts/tts_mlx.py`).
 
 ```bash
 python scripts/tts_mlx.py "Hello, this is a test!" \
@@ -167,44 +231,17 @@ python scripts/tts_mlx.py "Text to speak in cloned voice." \
   --output ~/tts-output/cloned.wav
 ```
 
-### PyTorch MPS (Fallback)
-
-```python
-import torch
-import soundfile as sf
-from qwen_tts import Qwen3TTSModel
-
-model = Qwen3TTSModel.from_pretrained(
-    "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
-    device_map="mps",        # CRITICAL: not "cpu", not "cuda"
-    dtype=torch.bfloat16,    # CRITICAL: not float16
-)
-
-wavs, sr = model.generate_custom_voice(
-    text="Hello world!",
-    language="English",
-    speaker="Ryan",
-    instruct="Speak in a cheerful, energetic tone.",
-)
-sf.write("output.wav", wavs[0], sr)
-```
-
 ## Step 4: Verify Output
 
 ```bash
-# Check audio file
 afplay output.wav          # macOS native playback
-aplay output.wav           # Linux (ALSA) alternative
 ffprobe output.wav         # Check format/duration
 ```
 
----
-
 ## Preset Speakers Reference
 
-The open-source CustomVoice model has only 9 preset speakers. No Spanish, Portuguese,
-German, French, Russian, or Italian preset speakers exist — but the model supports
-synthesizing text in all 10 languages using any speaker (cross-lingual).
+9 preset speakers (no Spanish/Portuguese/German/French/Russian/Italian presets —
+but the model supports all 10 languages using any speaker cross-lingually).
 
 | Speaker | Language | Style |
 |---------|----------|-------|
@@ -218,99 +255,15 @@ synthesizing text in all 10 languages using any speaker (cross-lingual).
 | Ono_Anna | Japanese | Natural female |
 | Sohee | Korean | Natural female |
 
-### Spanish (and other unsupported-preset languages)
-
-For languages without a preset speaker, use one of these approaches:
-
-1. **Cross-lingual with existing speaker** — use Ryan or Vivian with `--language Spanish`:
-   ```bash
-   python scripts/tts_mlx.py "Hola, ¿cómo estás?" --speaker Ryan --language Spanish
-   ```
-
-2. **Voice Design** — describe the desired voice in natural language:
-   ```bash
-   python scripts/tts_mlx.py "Hola, bienvenidos." \
-     --mode voice-design \
-     --instruct "A warm 30-year-old Colombian male with a calm, friendly tone" \
-     --language Spanish
-   ```
-
-3. **Voice Clone** — provide a 5-10s reference audio of a native speaker:
-   ```bash
-   python scripts/tts_mlx.py "Texto en español." \
-     --mode voice-clone \
-     --ref-audio /path/to/spanish_speaker.wav \
-     --ref-text "Transcripción del audio de referencia." \
-     --language Spanish
-   ```
-
-Note: The Alibaba Cloud DashScope API offers 49 timbres with broader language coverage
-(including Dolce for Italian), but the open-source model is limited to these 9.
-
-For a curated library of Spanish voices with a dedicated CLI, see the **Spanish Voices** section below.
-
-## Performance Notes
-
-- **RTF (Real-Time Factor)**: ~3.0 on M3 Max for 1.7B PyTorch (slower than real-time)
-- MLX 8-bit is significantly faster and lighter than PyTorch MPS
-- 0.6B models are ~3x faster than 1.7B with some quality tradeoff
-- First run on MPS/MLX is slower due to kernel compilation (29% improvement by run 3)
-- For faster-than-realtime TTS, consider F5-TTS (0.64 RTF) as alternative
-
-## MLX API Reference (mlx-audio)
-
-The unified `model.generate()` method handles all modes:
-
-```python
-from mlx_audio.tts import load_model
-
-# Voice cloning (Base model)
-model = load_model("mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit")
-results = model.generate(
-    text="Texto a sintetizar.",
-    lang_code="auto",        # auto-detects language from text
-    ref_audio="/path/to/reference.wav",
-    ref_text="Transcripción exacta del audio de referencia.",
-)
-
-# Voice design (VoiceDesign model — different model from above)
-model = load_model("mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit")
-# IMPORTANT: always pass explicit lang_code for non-English targets
-# Keep instruct in English — Spanish instructs cause gender/quality issues
-results = model.generate(
-    text="Texto en español.",
-    lang_code="spanish",     # NEVER use "auto" — causes English accent
-    instruct="A warm 30-year-old male with calm tone",
-)
-
-# Custom voice (CustomVoice model — different model from above)
-model = load_model("mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit")
-results = model.generate_custom_voice(
-    text="Hello!",
-    speaker="Ryan",
-    language="english",      # full word, lowercase
-)
-
-# All return generators:
-first_result = next(iter(results))
-audio_np = np.array(first_result.audio)
-sf.write("out.wav", audio_np, model.sample_rate)
-```
-
-**Method availability** (mlx-audio API):
-- `model.generate_voice_clone()` — does NOT exist; use `model.generate(ref_audio=..., ref_text=...)` instead
-- `model.generate_voice_design()` — exists and works; `model.generate(instruct=...)` also works as an alternative
-- `model.generate_custom_voice()` — exists and works; the standard method for preset speakers
+For Spanish and other languages without presets: use cross-lingual mode
+(`--language Spanish` with any speaker), Voice Design, or Voice Clone.
 
 ## Spanish Voices (qwen3-tts-spanish-voices)
 
 The [qwen3-tts-spanish-voices](https://github.com/alblez/qwen3-tts-spanish-voices) project
-provides a dedicated CLI for Spanish TTS with curated voices. Clone voices sourced from
-VoxForge Spanish (Creative Commons). Design voices use natural language descriptions.
+provides a CLI for Spanish TTS with curated voices (Creative Commons, VoxForge).
 
 ### Prerequisites
-
-Requires the qwen3-tts conda env already set up (Step 1 above). Then install from the repo directory:
 
 ```bash
 conda activate qwen3-tts
@@ -318,29 +271,16 @@ cd ~/Code/spanish-tts   # or the path configured in qwen3-tts.spanish-tts-path
 pip install -e ".[mlx]"
 ```
 
-Run from the repo path configured in `qwen3-tts.spanish-tts-path` (default: `~/Code/spanish-tts`).
-
 ### Quick Reference
 
-Requires the `qwen3-tts` conda env to be active (`conda activate qwen3-tts`).
-
 ```bash
-# Generate speech with a specific voice
-spanish-tts say "Hola, bienvenidos al programa." --voice neutral_male --play
-
-# List all available voices
-spanish-tts list
-
-# Generate with ALL voices for side-by-side comparison
-spanish-tts demo "Texto de prueba para comparar voces."
-
-# Options
+spanish-tts say "Hola, bienvenidos." --voice carlos_mx --play
+spanish-tts list                          # List all voices
+spanish-tts demo "Texto de prueba."       # Generate with ALL voices
 spanish-tts say "Texto." --voice carlos_mx --speed 1.1 --output ~/tts-output/custom.wav
 ```
 
 ### Shipped Voices
-
-Four design voices are available out of the box (no reference audio needed):
 
 | Voice | Gender | Description |
 |-------|--------|-------------|
@@ -349,85 +289,66 @@ Four design voices are available out of the box (no reference audio needed):
 | `energetic_male` | Male | Energetic, cheerful tone |
 | `warm_female` | Female | Warm, comforting tone |
 
-Clone voices (better accent fidelity) require running the curation pipeline below.
+Clone voices with better accent fidelity can be added from VoxForge.
+See `references/voxforge_curation.md` for the curation pipeline.
 
 ### Managing Voices
 
 ```bash
-# Add a clone voice from reference audio (5-10s, clean, no background noise)
-spanish-tts add-ref carlos_mx /path/to/audio.wav "Transcripción exacta del audio." \
-  --accent mexico --gender male
-
-# Add a design voice from a text description
+spanish-tts add-ref carlos_mx /path/to/audio.wav "Transcripción." --accent mexico --gender male
 spanish-tts add-design narrator "A calm 40-year-old male narrator" --gender male
-
-# Remove a voice
 spanish-tts remove carlos_mx
 ```
 
-Voice registry lives at `~/.spanish-tts/voices.yaml`. Reference audio is copied to `~/.spanish-tts/references/`.
+Voice registry: `~/.spanish-tts/voices.yaml`. Reference audio: `~/.spanish-tts/references/`.
 
-### Curation Pipeline (Adding Clone Voices from VoxForge)
+## Performance Notes
 
-Run from the spanish-tts repo directory to source clone voices from the
-`ciempiess/voxforge_spanish` HuggingFace dataset (21,692 samples — Spain, Argentina,
-Mexico, Chile, Latin America):
-
-```bash
-# Browse dataset stats by country/gender
-python scripts/curate.py browse
-
-# Find best speakers for a country/gender
-python scripts/curate.py pick --country mexico --gender male
-
-# Preview a speaker's clips
-python scripts/curate.py listen SPEAKER_ID
-
-# Export best clip as a voice (registers in voices.yaml automatically)
-python scripts/curate.py export SPEAKER_ID --name carlos_mx --accent mexico --gender male
-```
+- **RTF (Real-Time Factor)**: ~3.0 on M3 Max for 1.7B PyTorch (slower than real-time)
+- MLX 8-bit is significantly faster and lighter than PyTorch MPS
+- 0.6B models are ~3x faster than 1.7B with some quality tradeoff
+- First run on MPS/MLX is slower due to kernel compilation (29% improvement by run 3)
+- Each `conda run` call spawns a new process, reloading the model (~5-15s overhead).
+  Expect 20-40s total per TTS call on M1/M2, 15-25s on M3/M4 Max.
 
 ## Pitfalls
 
+### Critical
+
 1. **NEVER use device_map="cpu" on Mac** — will hang for 20+ minutes and may never complete
 2. **NEVER use float16 on MPS** — use bfloat16 only
+18. **qwen-tts (PyTorch) conflicts with mlx-audio/mlx-lm** — `qwen-tts` pins `transformers==4.57.3`, but `mlx-audio`/`mlx-lm` require `transformers>=5.0.0`. They cannot coexist. On Apple Silicon using MLX, do NOT install `qwen-tts`. If accidentally installed: `pip uninstall qwen-tts`.
+19. **conda run --no-banner incompatible with conda 25.x** — The `--no-banner` flag does not exist in conda 25.5.1+. Always use `conda run -n <env> <command>` without `--no-banner`.
+20. **WAV-to-MP3 rename vs convert** — `spanish-tts say` always outputs WAV. Never rename to .mp3. Always convert: `ffmpeg -y -i input.wav -acodec libmp3lame -b:a 128k output.mp3`.
+
+### Important
+
 3. **flash-attn does NOT compile on Apple Silicon** — skip it, not needed for MLX
-4. **sox must be installed** — `brew install sox` or audio processing will fail
-5. **First inference is slow** — kernel compilation warmup, subsequent runs faster
 6. **MLX models need exact folder names** — HuggingFace repo name must match local dir name
 7. **mlx-audio returns generators, not lists** — use `next(iter(results))` not `results[0]`
-8. **huggingface-cli is deprecated** — use `hf download` instead
-9. **Warnings about tokenizer regex and model type are harmless** — they don't affect generation quality
-10. **For voice cloning**: reference audio should be 5-10s, clean (no background noise)
-11. **The `--instruct` flag**: controls emotion/prosody for CustomVoice, is REQUIRED for VoiceDesign
-12. **datasets v4.8+ requires torchcodec for audio decoding** — if torch is not installed, use `ds.with_format("arrow")` then decode raw bytes with soundfile: `sf.read(io.BytesIO(row.column("audio")[0].as_py()["bytes"]))`
-13. **lang_code is case-insensitive** — both "english" and "English" work (both APIs call `.lower()` internally). Convention: MLX docs use lowercase ("english", "chinese"), PyTorch defaults use capitalized ("English", "Auto"). Either case works, but be consistent within a script.
-14. **speed parameter accepted but not yet functional** — `model.generate()` accepts `speed=` but silently ignores it (docstring: "not directly supported yet"). The bundled script adjusts the sample rate as a workaround. Do not rely on the API's speed parameter.
-15. **VoiceDesign with lang_code="auto" produces English accent** — "auto" skips the codec language token entirely, so the model defaults to English prosody (especially when the instruct prompt is in English). ALWAYS pass explicit `lang_code="spanish"` (or target language) for VoiceDesign. Clone mode is not affected because the reference audio provides the acoustic prior.
-16. **VoiceDesign instruct prompts should stay in ENGLISH, not the target language** — the model was trained primarily on English/Chinese voice descriptions. Writing instructs in Spanish causes severe gender confusion (male->female, female->male) and anime-like artifacts. Use English instructs + explicit `lang_code="spanish"` for best results. Even so, VoiceDesign produces "American TTS reading Spanish" prosody for most voices — only ~1 in 4 designs sounds near-native. For reliable native accent, always prefer voice cloning (Base model + reference audio).
-17. **VoiceDesign is unreliable for non-English/Chinese native accents** — the model fundamentally cannot produce native Spanish (or likely other non-English) prosody from text descriptions alone. Clone voices using real speaker audio are far superior for accent fidelity. Use VoiceDesign only as a fallback when no reference audio is available, and expect English-accented output.
-18. **qwen-tts (PyTorch) conflicts with mlx-audio/mlx-lm** — The official `qwen-tts` pip package pins `transformers==4.57.3`, but `mlx-audio`/`mlx-lm` require `transformers>=5.0.0`. They cannot coexist. On Apple Silicon using MLX, do NOT install `qwen-tts` — it's the CUDA/PyTorch path and unnecessary. If accidentally installed, remove with `pip uninstall qwen-tts`.
-19. **conda run --no-banner incompatible with conda 25.x** — The `--no-banner` flag does not exist in conda 25.5.1+. If you see `conda: error: unrecognized arguments: --no-banner` in stderr, remove the flag. This affects any code calling `conda run` in a subprocess, not just spanish-tts. The hermes-agent provider was patched to remove it. Always use `conda run -n <env> <command>` without `--no-banner`.
-20. **WAV-to-MP3 rename vs convert** — `spanish-tts say` always outputs WAV (PCM). Never use `os.rename()` or `shutil.move()` to change the extension to .mp3. Always convert with ffmpeg: `ffmpeg -y -i input.wav -acodec libmp3lame -b:a 128k output.mp3`. A renamed WAV will have wrong magic bytes (`RIFF` header instead of MP3 framing) and may break downstream tools (Telegram Opus conversion, media players expecting MP3 framing, any format-sniffing code).
+13. **lang_code is case-insensitive** — both "english" and "English" work (APIs call `.lower()` internally). Convention: MLX docs use lowercase, PyTorch uses capitalized. Either works.
+14. **speed parameter accepted but not yet functional** — `model.generate()` accepts `speed=` but silently ignores it. The bundled script adjusts sample rate as a workaround (changes pitch). Do not rely on the API's speed parameter.
+15. **VoiceDesign with lang_code="auto" produces English accent** — ALWAYS pass explicit `lang_code="spanish"` (or target language) for VoiceDesign. Clone mode is not affected.
+16. **VoiceDesign instruct prompts should stay in ENGLISH** — Spanish instructs cause gender confusion and artifacts. Use English instructs + explicit `lang_code="spanish"`.
+17. **VoiceDesign is unreliable for non-English/Chinese accents** — Clone voices using real speaker audio are far superior. Use VoiceDesign only as fallback when no reference audio is available.
 
-## Hermes Native TTS Provider Integration
+### Informational
 
-The `qwen3tts` provider in hermes-agent's `tools/tts_tool.py` wraps the `spanish-tts`
-CLI so that `text_to_speech(text=...)` uses Qwen3-TTS directly.
+See `references/pitfalls_informational.md` for lower-severity notes (sox install,
+first-inference warmup, deprecated CLI, harmless warnings, cloning tips, datasets torchcodec).
 
-**The agent does NOT need to use terminal() manually.** Just call `text_to_speech()`
-and it works.
+## Advanced: Native text_to_speech() Provider (Optional)
 
-### Pipeline
+> **This requires a local patch to `tools/tts_tool.py` in hermes-agent.**
+> The patch is lost on `hermes update`. For most use cases, the terminal()
+> approach in the Quick Reference above is simpler and maintenance-free.
 
-```
-text_to_speech() → _generate_qwen3tts() → conda run → spanish-tts say → WAV → ffmpeg → MP3/OGG
-```
+The `qwen3tts` provider wraps `spanish-tts` CLI so that `text_to_speech(text=...)`
+uses Qwen3-TTS directly.
 
-### Configuration
+Pipeline: `text_to_speech() -> _generate_qwen3tts() -> conda run -> spanish-tts say -> WAV -> ffmpeg -> MP3/OGG`
 
-In hermes `config.yaml`:
-
+Config in `config.yaml`:
 ```yaml
 tts:
   provider: qwen3tts
@@ -437,73 +358,19 @@ tts:
     conda_env: qwen3-tts   # conda environment name
 ```
 
-### Key details
+Key details:
+- 120-second subprocess timeout (typical synthesis: 15-30s on M-series Max)
+- Validates exit code and output file existence/size
+- Converts WAV to MP3 via ffmpeg; falls back with warning if ffmpeg fails
+- Edge TTS available as fallback by setting `provider: edge`
+- **Does NOT use the hermes terminal backend** — always runs locally
 
-- Uses `conda run -n qwen3-tts` to invoke `spanish-tts say` (no conda activate needed)
-- 120-second subprocess timeout (MLX on M1/M2/M3 Max takes ~15-30s for typical paragraphs)
-- Checks both exit code and output file existence/size before returning
-- Handles WAV→MP3 conversion via ffmpeg when the caller requests .mp3 output
-- After generation, the caller's Opus conversion logic handles WAV/MP3→OGG for Telegram voice bubbles
-- Edge TTS remains available as fallback by changing `provider` back to `edge`
+Full patch code and re-application steps: see `references/tts_tool_provider_patch.md`.
 
-### Patch documentation
+## MLX API Reference
 
-The provider is a local modification to `tools/tts_tool.py`. It will be lost on
-`hermes update`. See `references/tts_tool_provider_patch.md` in this skill for the
-full code and re-application instructions.
-
-## Troubleshooting text_to_speech() with qwen3tts Provider
-
-### Provider returns success but audio is wrong voice or silent
-
-1. Check conda env exists: `conda env list | grep qwen3-tts`
-2. Test CLI directly: `conda run -n qwen3-tts spanish-tts say -v carlos_mx -o /tmp/test.wav "Hola mundo"`
-3. Check the WAV: `file /tmp/test.wav` — should show `RIFF ... WAVE audio`
-4. If `conda run` fails, check conda version: `conda --version` (25.x removed `--no-banner` — see pitfall 19)
-
-### Provider silently falls back to Edge TTS
-
-The caller in `tts_tool.py` has a broad try/except. If `_generate_qwen3tts` raises an
-exception, some code paths may fall through to Edge TTS without logging. Check hermes
-logs for "Qwen3-TTS" vs "Edge TTS" in the log output to confirm which provider was
-actually used.
-
-### Telegram sends audio but it doesn't play as voice bubble
-
-Telegram requires Opus-in-OGG for voice bubbles. The provider auto-converts via
-`_convert_to_opus()` after generation. If this fails, the MP3 is sent as a document
-instead. Ensure ffmpeg is installed with libopus support:
-
-```bash
-ffmpeg -codecs | grep opus
-```
-
-### Output file has .mp3 extension but is actually WAV
-
-This means the ffmpeg WAV→MP3 conversion failed and the code fell back to renaming.
-Check that ffmpeg has libmp3lame:
-
-```bash
-ffmpeg -codecs | grep mp3lame
-```
-
-See pitfall 20 for details.
-
-## Voice Selection for Hermes Agent
-
-When the user asks for audio in Spanish without specifying a voice:
-- **Default**: `carlos_mx` (male, Mexican Spanish, most tested)
-- **Female voice**: use `lucia_es` when the user says "voz femenina" or context implies female voice
-
-To list all available voices:
-
-```bash
-conda run -n qwen3-tts spanish-tts list
-```
-
-The voice is set in config.yaml under `tts.qwen3tts.voice`, but the agent can also
-invoke `spanish-tts` directly via `terminal()` with `-v <voice_name>` for one-off
-voice changes without modifying the config.
+See `references/mlx_api_reference.md` for Python code examples covering all three
+modes (custom voice, voice design, voice clone) with the mlx-audio API.
 
 ## Sources
 
@@ -511,5 +378,6 @@ voice changes without modifying the config.
 - HuggingFace: https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base
 - Apple Silicon MLX: https://github.com/kapi2800/qwen3-tts-apple-silicon
 - MLX Audio: https://github.com/Blaizzy/mlx-audio
+- Spanish Voices: https://github.com/alblez/qwen3-tts-spanish-voices
 - Benchmark: https://tinycomputers.io/posts/the-real-cost-of-running-qwen-tts-locally-three-machines-compared.html
 - MPS fix: https://github.com/QwenLM/Qwen3-TTS/issues/69
