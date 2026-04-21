@@ -185,8 +185,9 @@ def main():
     # Resolve model
     model_id = args.model or os.environ.get("QWEN_TTS_MODEL") or DEFAULT_MODELS[args.mode]
 
-    # Resolve speaker
-    speaker = args.speaker or DEFAULT_SPEAKERS.get(args.language, "Ryan")
+    # Resolve speaker (case-insensitive language lookup)
+    lang_key = next((k for k in DEFAULT_SPEAKERS if k.lower() == args.language.lower()), None)
+    speaker = args.speaker or DEFAULT_SPEAKERS.get(lang_key, "Ryan") if lang_key else args.speaker or "Ryan"
 
     if args.mode == "custom-voice":
         generate_custom_voice(

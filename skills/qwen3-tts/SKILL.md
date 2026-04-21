@@ -1,6 +1,6 @@
 ---
 name: qwen3-tts
-version: 1.2.0
+version: 1.3.0
 description: >
   Run Qwen3-TTS text-to-speech locally on Apple Silicon (MLX preferred)
   or GPU/CPU (PyTorch). Supports voice cloning, voice design, and preset
@@ -110,12 +110,12 @@ Available on HuggingFace under `mlx-community/`:
 | CustomVoice 1.7B | mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit | mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit |
 | CustomVoice 0.6B | mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit | mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit |
 | VoiceDesign 1.7B | mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit | mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit |
-| Base 1.7B (Clone) | mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit | mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit |
+| Base 1.7B (Clone) | mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit | mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit |
 | Base 0.6B (Clone) | mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit | mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit |
 
 Download manually:
 ```bash
-huggingface-cli download mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit \
+hf download mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit \
   --local-dir ~/Models/qwen3-tts/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit
 ```
 
@@ -124,7 +124,7 @@ Models auto-download on first use if not pre-cached.
 ### PyTorch Models
 
 ```bash
-huggingface-cli download Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice \
+hf download Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice \
   --local-dir ~/Models/qwen3-tts/Qwen3-TTS-12Hz-1.7B-CustomVoice
 ```
 
@@ -194,6 +194,7 @@ sf.write("output.wav", wavs[0], sr)
 ```bash
 # Check audio file
 afplay output.wav          # macOS native playback
+aplay output.wav           # Linux (ALSA) alternative
 ffprobe output.wav         # Check format/duration
 ```
 
@@ -263,9 +264,8 @@ The unified `model.generate()` method handles all modes:
 ```python
 from mlx_audio.tts import load_model
 
-model = load_model("mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit")
-
 # Voice cloning (Base model)
+model = load_model("mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit")
 results = model.generate(
     text="Texto a sintetizar.",
     lang_code="auto",        # auto-detects language from text
@@ -273,7 +273,8 @@ results = model.generate(
     ref_text="Transcripción exacta del audio de referencia.",
 )
 
-# Voice design (VoiceDesign model)
+# Voice design (VoiceDesign model — different model from above)
+model = load_model("mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit")
 # IMPORTANT: always pass explicit lang_code for non-English targets
 # Keep instruct in English — Spanish instructs cause gender/quality issues
 results = model.generate(
@@ -282,7 +283,8 @@ results = model.generate(
     instruct="A warm 30-year-old male with calm tone",
 )
 
-# Custom voice (CustomVoice model)
+# Custom voice (CustomVoice model — different model from above)
+model = load_model("mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit")
 results = model.generate_custom_voice(
     text="Hello!",
     speaker="Ryan",
