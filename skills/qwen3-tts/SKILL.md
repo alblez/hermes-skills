@@ -11,6 +11,7 @@ platforms: [macos, linux]
 metadata:
   hermes:
     tags: [tts, speech, voice-cloning, voice-design, mlx, apple-silicon, qwen]
+    requires_toolsets: [tts]
     config:
       - key: qwen3-tts.spanish-tts-path
         description: "Path to the qwen3-tts-spanish-voices repository clone"
@@ -20,11 +21,9 @@ required_environment_variables:
   - name: QWEN_TTS_OUTPUT_DIR
     prompt: "Output directory for generated audio files"
     help: "Defaults to ~/tts-output/ if not set"
-    required_for: "custom output directory"
   - name: QWEN_TTS_MODEL
     prompt: "HuggingFace model ID override"
     help: "Defaults to the recommended 8-bit MLX model for each mode"
-    required_for: "custom model selection"
 ---
 
 # Qwen3-TTS Local Inference
