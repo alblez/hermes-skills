@@ -6,7 +6,7 @@ A collection of reusable skills for [Hermes Agent](https://github.com/NousResear
 
 | Skill | Description |
 |-------|-------------|
-| [qwen3-tts](skills/qwen3-tts/) | Run Qwen3-TTS text-to-speech locally on Apple Silicon (MLX) or GPU/CPU (PyTorch). Supports custom voices, voice design, and voice cloning. |
+| [qwen3-tts](skills/qwen3-tts/) | Run Qwen3-TTS text-to-speech locally on Apple Silicon (MLX) or GPU/CPU (PyTorch). Supports custom voices, voice design, and voice cloning. 10 languages, 3-second voice cloning, emotional control. |
 
 ## Installation
 
@@ -33,13 +33,15 @@ cp -r hermes-skills/skills/qwen3-tts ~/.hermes/skills/
 
 ```
 hermes-skills/
+├── .gitignore
 ├── README.md
 ├── LICENSE
 └── skills/
     └── qwen3-tts/
-        ├── SKILL.md          # Skill definition (loaded by Hermes)
+        ├── SKILL.md              # Skill definition (loaded by Hermes)
+        ├── requirements.txt      # Python dependencies
         └── scripts/
-            └── tts_mlx.py    # MLX inference script
+            └── tts_mlx.py        # MLX inference script
 ```
 
 ## Contributing
