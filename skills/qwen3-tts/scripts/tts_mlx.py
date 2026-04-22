@@ -33,24 +33,30 @@ import numpy as np
 import soundfile as sf
 
 
+# Model variant constants
+_V_06B_4BIT = "0.6B-4bit"
+_V_06B_8BIT = "0.6B-8bit"
+_V_17B_4BIT = "1.7B-4bit"
+_V_17B_8BIT = "1.7B-8bit"
+
 # Model matrix: {mode: {variant: model_id}}
 # VoiceDesign has no 0.6B variant — only 1.7B.
 _MODEL_MATRIX = {
     "custom-voice": {
-        "0.6B-4bit": "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit",
-        "0.6B-8bit": "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
-        "1.7B-4bit": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
-        "1.7B-8bit": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
+        _V_06B_4BIT: "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit",
+        _V_06B_8BIT: "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
+        _V_17B_4BIT: "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+        _V_17B_8BIT: "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
     },
     "voice-design": {
-        "1.7B-4bit": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
-        "1.7B-8bit": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
+        _V_17B_4BIT: "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+        _V_17B_8BIT: "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
     },
     "voice-clone": {
-        "0.6B-4bit": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit",
-        "0.6B-8bit": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit",
-        "1.7B-4bit": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
-        "1.7B-8bit": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+        _V_06B_4BIT: "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit",
+        _V_06B_8BIT: "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit",
+        _V_17B_4BIT: "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+        _V_17B_8BIT: "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
     },
 }
 
@@ -98,19 +104,19 @@ def _resolve_default_model(mode: str) -> str:
     variants = _MODEL_MATRIX[mode]
 
     if ram_gb <= 8:
-        target = "0.6B-4bit"
+        target = _V_06B_4BIT
         if target not in variants:
             # VoiceDesign has no 0.6B — fall back to 1.7B-4bit
-            target = "1.7B-4bit"
-            print(f"  NOTE: {mode} has no 0.6B model. Using 1.7B-4bit on {ram_gb}GB RAM "
+            target = _V_17B_4BIT
+            print(f"  NOTE: {mode} has no 0.6B model. Using {target} on {ram_gb}GB RAM "
                   f"(~850MB resident). Monitor memory pressure.", file=sys.stderr)
         else:
             print(f"  Auto-selected {target} for {ram_gb}GB RAM", file=sys.stderr)
     elif ram_gb <= 16:
-        target = "1.7B-4bit"
+        target = _V_17B_4BIT
         print(f"  Auto-selected {target} for {ram_gb}GB RAM", file=sys.stderr)
     else:
-        target = "1.7B-8bit"
+        target = _V_17B_8BIT
         # No message for the happy path (>=24GB)
 
     if target not in variants:
