@@ -33,13 +33,25 @@ import numpy as np
 import soundfile as sf
 
 
-# Default models per mode
-# Community quantizations — may be renamed/removed upstream.
-# If model loading fails, check mlx-community on HuggingFace for current IDs.
-DEFAULT_MODELS = {
-    "custom-voice": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
-    "voice-design": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
-    "voice-clone": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+# Model matrix: {mode: {variant: model_id}}
+# VoiceDesign has no 0.6B variant — only 1.7B.
+_MODEL_MATRIX = {
+    "custom-voice": {
+        "0.6B-4bit": "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit",
+        "0.6B-8bit": "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
+        "1.7B-4bit": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+        "1.7B-8bit": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
+    },
+    "voice-design": {
+        "1.7B-4bit": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit",
+        "1.7B-8bit": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
+    },
+    "voice-clone": {
+        "0.6B-4bit": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit",
+        "0.6B-8bit": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit",
+        "1.7B-4bit": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+        "1.7B-8bit": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+    },
 }
 
 # Default speakers per language
@@ -50,16 +62,76 @@ DEFAULT_SPEAKERS = {
     "Korean": "Sohee",
 }
 
-# Cache loaded model
+# Model cache — inert under `conda run` (new process per call).
+# Becomes active when this module is imported by a long-lived process
+# (e.g., the MCP server planned in references/future_work.md).
 _model_cache = {}
 
 # Tested library versions — warn if different
 _TESTED_VERSIONS = {"mlx-audio": "0.4.2", "mlx-lm": "0.31.1"}
 
 
+def _get_system_ram_gb() -> int:
+    """Detect system RAM in GB (macOS only, returns 0 on failure)."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["sysctl", "-n", "hw.memsize"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            return int(result.stdout.strip()) // (1024 ** 3)
+    except Exception:
+        pass
+    return 0
+
+
+def _resolve_default_model(mode: str) -> str:
+    """Select model variant based on system RAM.
+
+    Tiers:
+        <= 8 GB  -> 0.6B-4bit (VoiceDesign: 1.7B-4bit with warning)
+        9-16 GB  -> 1.7B-4bit
+        >= 24 GB -> 1.7B-8bit
+    """
+    ram_gb = _get_system_ram_gb()
+    variants = _MODEL_MATRIX[mode]
+
+    if ram_gb <= 8:
+        target = "0.6B-4bit"
+        if target not in variants:
+            # VoiceDesign has no 0.6B — fall back to 1.7B-4bit
+            target = "1.7B-4bit"
+            print(f"  NOTE: {mode} has no 0.6B model. Using 1.7B-4bit on {ram_gb}GB RAM "
+                  f"(~850MB resident). Monitor memory pressure.", file=sys.stderr)
+        else:
+            print(f"  Auto-selected {target} for {ram_gb}GB RAM", file=sys.stderr)
+    elif ram_gb <= 16:
+        target = "1.7B-4bit"
+        print(f"  Auto-selected {target} for {ram_gb}GB RAM", file=sys.stderr)
+    else:
+        target = "1.7B-8bit"
+        # No message for the happy path (>=24GB)
+
+    if target not in variants:
+        # Shouldn't happen, but fall back to first available
+        target = next(iter(variants))
+        print(f"  WARNING: Falling back to {target}", file=sys.stderr)
+
+    return variants[target]
+
+
 def check_versions():
     """Warn if library versions differ from tested."""
     import importlib.metadata
+    # Detect conflicting PyTorch package
+    try:
+        qwen_tts_ver = importlib.metadata.version("qwen-tts")
+        print(f"ERROR: qwen-tts {qwen_tts_ver} is installed and conflicts with mlx-audio "
+              f"(pins transformers 4.x). Run: pip uninstall qwen-tts", file=sys.stderr)
+        sys.exit(1)
+    except importlib.metadata.PackageNotFoundError:
+        pass  # Good — no conflict
     for pkg, tested_ver in _TESTED_VERSIONS.items():
         try:
             actual = importlib.metadata.version(pkg)
@@ -121,19 +193,19 @@ def generate_custom_voice(text: str, speaker: str, language: str,
     first_result = next(iter(results))
     audio_np = np.array(first_result.audio)
 
-    # Apply speed adjustment via resampling if needed
+    # Apply speed adjustment via time-stretching (preserves pitch)
     sample_rate = model.sample_rate
     if not math.isclose(speed, 1.0):
-        # Workaround: mlx-audio's speed parameter is not yet functional.
-        # Adjusting sample rate simulates speed but also shifts pitch.
-        print(f"  WARNING: Speed via sample rate change — pitch will shift. "
-              f"True speed control not yet supported by mlx-audio.", file=sys.stderr)
-        effective_sr = int(sample_rate * speed)
-        sf.write(output_path, audio_np, effective_sr)
-        print(f"  Saved: {output_path} (sr={effective_sr}, speed={speed}x)")
-    else:
-        sf.write(output_path, audio_np, sample_rate)
-        print(f"  Saved: {output_path} (sr={sample_rate})")
+        try:
+            import librosa
+            audio_np = librosa.effects.time_stretch(audio_np, rate=speed)
+            print(f"  Applied {speed}x speed via time-stretch (pitch preserved)")
+        except ImportError:
+            print(f"  WARNING: librosa not installed — falling back to sample rate hack "
+                  f"(pitch will shift). Install: pip install librosa", file=sys.stderr)
+            sample_rate = int(sample_rate * speed)
+    sf.write(output_path, audio_np, sample_rate)
+    print(f"  Saved: {output_path} (sr={sample_rate})")
 
     duration = len(audio_np) / sample_rate
     print(f"  Duration: {duration:.1f}s")
@@ -144,6 +216,10 @@ def generate_voice_design(text: str, instruct: str, language: str,
                           model_id: str, output: str | None):
     """Generate speech from a voice description."""
     model = get_model(model_id)
+
+    if language.lower() not in ("english", "chinese"):
+        print(f"  WARNING: VoiceDesign quality is unreliable for {language}. "
+              f"Consider --mode voice-clone for better accent fidelity.", file=sys.stderr)
 
     print(f"Generating voice design: instruct='{instruct[:50]}...'")
     results = model.generate_voice_design(
@@ -192,11 +268,27 @@ def resolve_speaker(language: str, speaker_arg: str | None) -> str:
     )
     if lang_key:
         return speaker_arg or DEFAULT_SPEAKERS.get(lang_key, "Ryan")
+    if not speaker_arg:
+        print(f"  NOTE: No preset speaker for {language}; defaulting to Ryan (English). "
+              f"Consider --mode voice-clone for native accent.", file=sys.stderr)
     return speaker_arg or "Ryan"
 
 
 def validate_args(args):
     """Validate argument combinations and warn on unsupported options."""
+    # Text length limit
+    if len(args.text) > 10000:
+        print(f"ERROR: text too long ({len(args.text)} chars, max 10000)", file=sys.stderr)
+        sys.exit(1)
+    # Speed range
+    if not (0.5 <= args.speed <= 2.0):
+        print(f"ERROR: --speed must be between 0.5 and 2.0 (got {args.speed})", file=sys.stderr)
+        sys.exit(1)
+    # Ref-audio file existence
+    if args.ref_audio and not args.ref_audio.startswith(("http://", "https://")):
+        if not os.path.exists(args.ref_audio):
+            print(f"ERROR: --ref-audio file not found: {args.ref_audio}", file=sys.stderr)
+            sys.exit(1)
     if not math.isclose(args.speed, 1.0) and args.mode != "custom-voice":
         print(f"WARNING: --speed is only supported in custom-voice mode, ignoring speed={args.speed}", file=sys.stderr)
     if args.mode == "voice-design" and not args.instruct:
@@ -228,7 +320,7 @@ def main():
     check_versions()
     validate_args(args)
 
-    model_id = args.model or os.environ.get("QWEN_TTS_MODEL") or DEFAULT_MODELS[args.mode]
+    model_id = args.model or os.environ.get("QWEN_TTS_MODEL") or _resolve_default_model(args.mode)
     speaker = resolve_speaker(args.language, args.speaker)
 
     if args.mode == "custom-voice":

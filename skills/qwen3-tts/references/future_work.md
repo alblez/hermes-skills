@@ -5,12 +5,22 @@ improvements that were identified but not implemented in v1.5.0.
 
 ---
 
-## MCP Server (High Priority)
+## MCP Server -- IMPLEMENTED
 
-Build a Model Context Protocol server for `spanish-tts` so Hermes can call it
-as a tool without patching `tts_tool.py`. The server survives `hermes update`,
-provides a clean tool interface, and reuses the existing `_model_cache` so the
-model stays loaded across calls (eliminating the 5-15s reload per `conda run`).
+**Status**: Implemented in `src/spanish_tts/mcp_server.py` in the
+[qwen3-tts-spanish-voices](https://github.com/alblez/qwen3-tts-spanish-voices) repo.
+
+Install: `pip install -e ".[mlx,mcp]"`
+
+Hermes config:
+```yaml
+mcp_servers:
+  spanish-tts:
+    command: ["conda", "run", "-n", "qwen3-tts", "python", "-m", "spanish_tts.mcp_server"]
+```
+
+The implementation follows the sketch below. The model preloads eagerly at
+server start, eliminating the 5-15s cold start per `conda run` call.
 
 ### Target repo
 

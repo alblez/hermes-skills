@@ -1,7 +1,9 @@
 # Qwen3-TTS MLX inference dependencies
 # Last verified: mlx-audio 0.4.2, mlx-lm 0.31.1, transformers 5.5.4 (Apr 2026)
-mlx-audio>=0.3.0,<1.0
-mlx-lm>=0.30.0,<1.0
-transformers>=5.0.0
-numpy
-soundfile
+mlx-audio>=0.4.0,<0.5
+mlx-lm>=0.31.0,<0.32
+transformers>=5.0.0,<6.0
+numpy>=1.26,<3
+soundfile>=0.12
+# Optional: librosa for pitch-preserving speed adjustment (graceful fallback if absent)
+# librosa>=0.10
