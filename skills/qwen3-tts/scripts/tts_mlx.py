@@ -203,7 +203,7 @@ def generate_custom_voice(text: str, speaker: str, language: str,
     sample_rate = model.sample_rate
     if not math.isclose(speed, 1.0):
         try:
-            import librosa
+            import librosa  # type: ignore[import-not-found]  # optional dependency
             audio_np = librosa.effects.time_stretch(audio_np, rate=speed)
             print(f"  Applied {speed}x speed via time-stretch (pitch preserved)")
         except ImportError:
