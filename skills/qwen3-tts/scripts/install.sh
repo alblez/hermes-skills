@@ -176,7 +176,7 @@ else
         warn "Manually add spanish-tts to mcp_servers in config.yaml"
     else
         info "Detected Python: $CONDA_PYTHON"
-        python3 << PYEOF
+        conda run -n "$CONDA_ENV" python3 << PYEOF
 import sys
 from pathlib import Path
 
