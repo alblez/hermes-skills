@@ -63,6 +63,8 @@ For long texts (>50 words), pass `stream=True` for lower memory usage:
 mcp_spanish-tts_say(text="Long text here...", voice="carlos_mx", stream=True)
 ```
 Output format is identical. Streaming uses incremental decoding internally.
+Streaming is MCP-only -- the terminal fallback (`tts_mlx.py`) does not support
+it since each `conda run` invocation is a short-lived process.
 
 ### Fallback: terminal()
 
@@ -392,15 +394,25 @@ spanish-tts say "Texto." --voice carlos_mx --speed 1.1 --output ~/tts-output/cus
 
 ### Shipped Voices
 
-| Voice | Gender | Description |
-|-------|--------|-------------|
-| `neutral_male` (default) | Male | Neutral, clear Latin American accent |
-| `neutral_female` | Female | Neutral, clear Latin American accent |
-| `energetic_male` | Male | Energetic, cheerful tone |
-| `warm_female` | Female | Warm, comforting tone |
+| Voice | Type | Gender | Accent |
+|-------|------|--------|--------|
+| `carlos_mx` | clone | Male | Mexico |
+| `lucia_es` | clone | Female | Spain |
+| `neutral_male` (default) | design | Male | Neutral Latin American |
+| `neutral_female` | clone | Female | Neutral Latin American |
+| `energetic_male` | design | Male | Energetic, cheerful |
+| `warm_female` | clone | Female | Spain, warm tone |
+| `camila_cl` | clone | Female | Chile |
+| `diego_la` | clone | Male | Latin America |
+| `elena_mx` | clone | Female | Mexico |
+| `martin_ar` | clone | Male | Argentina |
+| `mateo_cl` | clone | Male | Chile |
+| `pedro_es` | clone | Male | Spain |
+| `sofia_ar` | clone | Female | Argentina |
+| `valentina_la` | clone | Female | Latin America |
 
-Clone voices with better accent fidelity can be added from VoxForge.
-See `references/voxforge_curation.md` for the curation pipeline.
+Additional voices can be added with `spanish-tts add-ref` or `spanish-tts add-design`.
+See `references/voxforge_curation.md` for the VoxForge curation pipeline.
 
 ### Managing Voices
 
