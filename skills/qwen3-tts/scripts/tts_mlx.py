@@ -207,8 +207,8 @@ def generate_custom_voice(text: str, speaker: str, language: str,
             audio_np = librosa.effects.time_stretch(audio_np, rate=speed)
             print(f"  Applied {speed}x speed via time-stretch (pitch preserved)")
         except ImportError:
-            print(f"  WARNING: librosa not installed — falling back to sample rate hack "
-                  f"(pitch will shift). Install: pip install librosa", file=sys.stderr)
+            print("  WARNING: librosa not installed — falling back to sample rate hack "
+                  "(pitch will shift). Install: pip install librosa", file=sys.stderr)
             sample_rate = int(sample_rate * speed)
     sf.write(output_path, audio_np, sample_rate)
     print(f"  Saved: {output_path} (sr={sample_rate})")
