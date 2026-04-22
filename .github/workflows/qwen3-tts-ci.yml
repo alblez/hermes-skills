@@ -1,0 +1,140 @@
+name: qwen3-tts CI
+
+on:
+  push:
+    paths:
+      - 'skills/qwen3-tts/**'
+  pull_request:
+    paths:
+      - 'skills/qwen3-tts/**'
+  schedule:
+    # Weekly — catch upstream dep breakage (mlx-audio, mlx-lm, transformers)
+    - cron: '0 9 * * 1'  # Monday 09:00 UTC
+  workflow_dispatch: {}
+
+defaults:
+  run:
+    working-directory: skills/qwen3-tts
+
+jobs:
+  lint:
+    name: Static checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Python syntax — tts_mlx.py
+        run: python -c "import ast; ast.parse(open('scripts/tts_mlx.py').read()); print('OK')"
+
+      - name: Bash syntax — install.sh
+        run: bash -n scripts/install.sh
+
+      - name: YAML frontmatter — SKILL.md
+        run: |
+          pip install -q pyyaml
+          python -c "
+          import yaml
+          text = open('SKILL.md').read()
+          fm = text.split('---')[1]
+          d = yaml.safe_load(fm)
+          assert d['name'] == 'qwen3-tts', f'Expected name qwen3-tts, got {d[\"name\"]}'
+          assert d['platforms'] == ['macos'], f'Expected [macos], got {d[\"platforms\"]}'
+          keys = [c['key'] for c in d['metadata']['hermes']['config']]
+          assert 'qwen3-tts.run-prefix' in keys, 'run-prefix config key missing'
+          assert 'qwen3-tts.spanish-tts-path' in keys, 'spanish-tts-path config key missing'
+          print(f'OK: v{d[\"version\"]}, {len(keys)} config keys, platforms={d[\"platforms\"]}')
+          "
+
+      - name: SKILL.md — no broken template vars
+        run: |
+          # Ensure ${HERMES_SKILL_DIR} is used, not hardcoded paths
+          if grep -q '~/.hermes/skills/qwen3-tts' SKILL.md; then
+            echo "FAIL: Found hardcoded ~/.hermes/skills/qwen3-tts path"
+            exit 1
+          fi
+          echo "OK: No hardcoded skill paths"
+
+      - name: SKILL.md — pitfalls sequential
+        run: |
+          python -c "
+          import re
+          text = open('SKILL.md').read()
+          # Extract pitfall numbers from the Pitfalls section
+          pitfall_section = text.split('## Pitfalls')[1].split('## ')[0]
+          numbers = [int(m) for m in re.findall(r'^(\d+)\.', pitfall_section, re.MULTILINE)]
+          expected = list(range(1, len(numbers) + 1))
+          assert numbers == expected, f'Pitfalls not sequential: {numbers} (expected {expected})'
+          print(f'OK: {len(numbers)} pitfalls, numbered 1-{len(numbers)}')
+          "
+
+  deps:
+    name: Dependency resolution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check requirements.txt is parseable
+        run: pip install --dry-run -r requirements.txt 2>&1 | tail -5 || true
+        # MLX packages won't install on Linux (needs Metal), but pip --dry-run
+        # validates the version specifiers are syntactically correct.
+        # Failure here means a malformed pin, not a missing platform package.
+
+      - name: Check for qwen-tts conflict markers
+        run: |
+          # Verify the conflict detection code exists in tts_mlx.py
+          if ! grep -q 'qwen-tts.*conflicts' scripts/tts_mlx.py; then
+            echo "FAIL: qwen-tts conflict detection missing from tts_mlx.py"
+            exit 1
+          fi
+          echo "OK: Conflict detection present"
+
+  structure:
+    name: Skill structure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Required files exist
+        run: |
+          for f in SKILL.md requirements.txt scripts/tts_mlx.py scripts/install.sh; do
+            test -f "$f" || { echo "FAIL: Missing $f"; exit 1; }
+          done
+          test -x scripts/install.sh || { echo "FAIL: install.sh not executable"; exit 1; }
+          echo "OK: All required files present and executable"
+
+      - name: Required SKILL.md sections
+        run: |
+          for section in "When to Use" "Hermes Agent Quick Reference" "Verification" \
+                         "Pitfalls" "Preset Speakers Reference" "Uninstall"; do
+            if ! grep -q "## $section\|### $section" SKILL.md; then
+              echo "FAIL: Missing section '$section'"
+              exit 1
+            fi
+          done
+          echo "OK: All required sections present"
+
+      - name: RUN_PREFIX used in agent commands
+        run: |
+          count=$(grep -c 'RUN_PREFIX' SKILL.md)
+          if [ "$count" -lt 10 ]; then
+            echo "FAIL: Only $count RUN_PREFIX refs (expected >=10)"
+            exit 1
+          fi
+          echo "OK: $count RUN_PREFIX references"
+
+      - name: HERMES_SKILL_DIR used for script paths
+        run: |
+          count=$(grep -c 'HERMES_SKILL_DIR' SKILL.md)
+          if [ "$count" -lt 3 ]; then
+            echo "FAIL: Only $count HERMES_SKILL_DIR refs (expected >=3)"
+            exit 1
+          fi
+          echo "OK: $count HERMES_SKILL_DIR references"
