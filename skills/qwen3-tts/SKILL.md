@@ -162,33 +162,33 @@ pip install -e ".[mlx,mcp]"
 
 ### Register with Hermes
 
-```bash
-hermes mcp add spanish-tts --command "conda run -n qwen3-tts python -m spanish_tts.mcp_server"
-```
+Add the MCP server to `~/.hermes/config.yaml` using the conda env's Python
+binary directly (do NOT use `conda run` -- see pitfall 6):
 
-Or add directly to `config.yaml`:
 ```yaml
 mcp_servers:
   spanish-tts:
-    command: ["conda", "run", "-n", "qwen3-tts", "python", "-m", "spanish_tts.mcp_server"]
+    command: /opt/miniconda3/envs/qwen3-tts/bin/python
+    args: ["-m", "spanish_tts.mcp_server"]
 ```
 
-> For non-conda environments, adjust the `command` array to point to your
-> environment's Python, e.g.: `["/path/to/venv/bin/python", "-m", "spanish_tts.mcp_server"]`
+Replace the `command` path with your conda env's Python:
+`conda run -n qwen3-tts which python` to find it.
+
+> `hermes mcp add` with `--args` has an argparse bug with flags like `-m`.
+> Edit `config.yaml` directly instead.
 
 ### Verify
 
 ```bash
-# Check the server starts
-conda run -n qwen3-tts python -m spanish_tts.mcp_server --help
+hermes mcp test spanish-tts
+# Expected: ✓ Connected, ✓ Tools discovered: 3 (say, list_all_voices, demo)
 
-# Test via Hermes
 hermes chat -q "List the available Spanish TTS voices"
 ```
 
 Once configured, Hermes exposes `mcp_spanish-tts_say`, `mcp_spanish-tts_list_all_voices`,
-and `mcp_spanish-tts_demo` as native tools. See `references/future_work.md` for the
-full implementation plan and server source code.
+and `mcp_spanish-tts_demo` as native tools.
 
 ## Approach Selection
 
@@ -443,24 +443,25 @@ Voice registry: `~/.spanish-tts/voices.yaml`. Reference audio: `~/.spanish-tts/r
 3. **qwen-tts (PyTorch) conflicts with mlx-audio/mlx-lm** — `qwen-tts` pins `transformers==4.57.3`, but `mlx-audio`/`mlx-lm` require `transformers>=5.0.0`. They cannot coexist. On Apple Silicon using MLX, do NOT install `qwen-tts`. If accidentally installed: `pip uninstall qwen-tts`.
 4. **conda run --no-banner incompatible with conda 25.x** — The `--no-banner` flag does not exist in conda 25.5.1+. Always use `conda run -n <env> <command>` without `--no-banner`.
 5. **WAV-to-MP3 rename vs convert** — `spanish-tts say` always outputs WAV. Never rename to .mp3. Always convert: `ffmpeg -y -i input.wav -af loudnorm=I=-16:TP=-1.5:LRA=11 -acodec libmp3lame -b:a 192k output.mp3`.
+6. **conda run is incompatible with MCP stdio servers** — `conda run` intercepts stdin/stdout, breaking JSON-RPC. Use the conda env's Python binary directly as the MCP command (see MCP Server Setup above). `conda run` is fine for fire-and-forget CLI commands like `spanish-tts say`.
 
 ### Important
 
-6. **flash-attn does NOT compile on Apple Silicon** — skip it, not needed for MLX
-7. **MLX models need exact folder names** — HuggingFace repo name must match local dir name
-8. **mlx-audio returns generators, not lists** — use `next(iter(results))` not `results[0]`
-9. **lang_code is case-insensitive** — both "english" and "English" work (APIs call `.lower()` internally). Convention: MLX docs use lowercase, PyTorch uses capitalized. Either works.
-10. **speed parameter accepted but not yet functional** — `model.generate()` accepts `speed=` but silently ignores it. The bundled script uses librosa time-stretch as a workaround (falls back to sample rate change if librosa is not installed). Do not rely on the API's speed parameter.
-11. **VoiceDesign with lang_code="auto" produces English accent** — ALWAYS pass explicit `lang_code="spanish"` (or target language) for VoiceDesign. Clone mode is not affected.
-12. **VoiceDesign instruct prompts should stay in ENGLISH** — Spanish instructs cause gender confusion and artifacts. Use English instructs + explicit `lang_code="spanish"`.
-13. **VoiceDesign is unreliable for non-English/Chinese accents** — Clone voices using real speaker audio are far superior. Use VoiceDesign only as fallback when no reference audio is available.
+7. **flash-attn does NOT compile on Apple Silicon** — skip it, not needed for MLX
+8. **MLX models need exact folder names** — HuggingFace repo name must match local dir name
+9. **mlx-audio returns generators, not lists** — use `next(iter(results))` not `results[0]`
+10. **lang_code is case-insensitive** — both "english" and "English" work (APIs call `.lower()` internally). Convention: MLX docs use lowercase, PyTorch uses capitalized. Either works.
+11. **speed parameter accepted but not yet functional** — `model.generate()` accepts `speed=` but silently ignores it. The bundled script uses librosa time-stretch as a workaround (falls back to sample rate change if librosa is not installed). Do not rely on the API's speed parameter.
+12. **VoiceDesign with lang_code="auto" produces English accent** — ALWAYS pass explicit `lang_code="spanish"` (or target language) for VoiceDesign. Clone mode is not affected.
+13. **VoiceDesign instruct prompts should stay in ENGLISH** — Spanish instructs cause gender confusion and artifacts. Use English instructs + explicit `lang_code="spanish"`.
+14. **VoiceDesign is unreliable for non-English/Chinese accents** — Clone voices using real speaker audio are far superior. Use VoiceDesign only as fallback when no reference audio is available.
 
 ### Informational
 
-14. **Harmless Mistral regex warning** — Every generation prints `"incorrect regex pattern... fix_mistral_regex=True"`. This is a tokenizer compatibility notice from HuggingFace, not a real error. Ignore it.
-15. **Model type mismatch warning** — Every generation prints `"model of type qwen3_tts to instantiate a model of type ''"`. Harmless HuggingFace warning. Ignore it.
-16. **Empty text silently generates audio** — The `spanish-tts` CLI does not validate empty input. Passing `""` produces a ~0.8s WAV of silence/noise. The MCP server validates and rejects empty text.
-17. **"Fetching N files" progress bar on cached models** — Appears on every run even when the model is already downloaded. HuggingFace Hub checking for updates. Harmless but noisy.
+15. **Harmless Mistral regex warning** — Every generation prints `"incorrect regex pattern... fix_mistral_regex=True"`. This is a tokenizer compatibility notice from HuggingFace, not a real error. Ignore it.
+16. **Model type mismatch warning** — Every generation prints `"model of type qwen3_tts to instantiate a model of type ''"`. Harmless HuggingFace warning. Ignore it.
+17. **Empty text silently generates audio** — The `spanish-tts` CLI does not validate empty input. Passing `""` produces a ~0.8s WAV of silence/noise. The MCP server validates and rejects empty text.
+18. **"Fetching N files" progress bar on cached models** — Appears on every run even when the model is already downloaded. HuggingFace Hub checking for updates. Harmless but noisy.
 
 See `references/pitfalls_informational.md` for additional lower-severity notes (sox install,
 first-inference warmup, deprecated CLI, cloning tips, datasets torchcodec).

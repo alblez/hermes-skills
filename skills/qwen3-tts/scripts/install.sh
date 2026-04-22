@@ -170,23 +170,29 @@ elif [[ ! -f "$HERMES_CONFIG" ]]; then
     warn "Install Hermes first: https://hermes-agent.nousresearch.com/docs/getting-started/installation"
 else
     info "Updating MCP config in $HERMES_CONFIG..."
-    python3 << 'PYEOF'
+    CONDA_PYTHON="$(conda run -n "$CONDA_ENV" which python 2>/dev/null)"
+    if [[ -z "$CONDA_PYTHON" ]]; then
+        warn "Could not detect conda env Python path — skipping MCP config"
+        warn "Manually add spanish-tts to mcp_servers in config.yaml"
+    else
+        info "Detected Python: $CONDA_PYTHON"
+        python3 << PYEOF
 import sys
 from pathlib import Path
 
 try:
     import yaml
 except ImportError:
-    # PyYAML not in system Python — try to give a useful message
     print("  [!] PyYAML not available in system Python. Install: pip3 install pyyaml", file=sys.stderr)
     print("  [!] Or manually add mcp_servers.spanish-tts to config.yaml", file=sys.stderr)
     sys.exit(0)  # Non-fatal
 
-config_path = Path.home() / ".hermes" / "config.yaml"
+config_path = Path("${HERMES_CONFIG}").expanduser()
 with open(config_path) as f:
     config = yaml.safe_load(f) or {}
 
-correct_command = ["conda", "run", "-n", "qwen3-tts", "python", "-m", "spanish_tts.mcp_server"]
+python_cmd = "${CONDA_PYTHON}"
+correct_args = ["-m", "spanish_tts.mcp_server"]
 
 mcp = config.setdefault("mcp_servers", {})
 existing = mcp.get("spanish-tts", {})
@@ -194,20 +200,26 @@ existing = mcp.get("spanish-tts", {})
 needs_update = False
 if not existing:
     needs_update = True
-elif existing.get("command") != correct_command:
+elif existing.get("command") != python_cmd:
+    needs_update = True
+elif existing.get("args") != correct_args:
     needs_update = True
 elif existing.get("enabled") is False:
     needs_update = True
 
 if needs_update:
-    mcp["spanish-tts"] = {"command": correct_command}
+    mcp["spanish-tts"] = {
+        "command": python_cmd,
+        "args": correct_args,
+    }
     config["mcp_servers"] = mcp
     with open(config_path, "w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-    print("  [✓] MCP config updated (command as YAML array, enabled)")
+    print(f"  [✓] MCP config updated (command: {python_cmd}, args: {correct_args})")
 else:
     print("  [✓] MCP config already correct")
 PYEOF
+    fi
     info "MCP configuration done"
 fi
 
