@@ -17,6 +17,10 @@ metadata:
         description: "Path to the qwen3-tts-spanish-voices repository clone"
         default: "~/Code/spanish-tts"
         prompt: "Spanish TTS repo path"
+      - key: qwen3-tts.run-prefix
+        description: "Command prefix to run tools in the TTS environment (conda run, venv path, etc.)"
+        default: "conda run -n qwen3-tts"
+        prompt: "Environment run prefix (e.g., 'conda run -n qwen3-tts' or '/path/to/venv/bin/')"
 required_environment_variables:
   - name: QWEN_TTS_OUTPUT_DIR
     prompt: "Output directory for generated audio files"
@@ -42,6 +46,10 @@ voice descriptions (VoiceDesign), and 3-second voice cloning (Base). 10 language
 
 ## Hermes Agent Quick Reference
 
+> **`${RUN_PREFIX}`** in commands below refers to the `qwen3-tts.run-prefix` skill
+> config value (default: `conda run -n qwen3-tts`). For venv/uv setups, configure
+> it to the environment's bin path (e.g., `/path/to/venv/bin/`).
+
 ### Primary method: MCP
 
 If the MCP server is configured (see MCP Server Setup below), Hermes calls
@@ -60,18 +68,18 @@ Convert the WAV for delivery as needed (MP3, OGG for Telegram).
 If the MCP server is not running, use `terminal()` directly:
 
 ```bash
-conda run -n qwen3-tts spanish-tts say -v carlos_mx -o /tmp/output.wav "Texto en español"
+${RUN_PREFIX} spanish-tts say -v carlos_mx -o /tmp/output.wav "Texto en español"
 ```
 
 To convert WAV to MP3 (for non-Telegram delivery):
 ```bash
-conda run -n qwen3-tts spanish-tts say -v carlos_mx -o /tmp/out.wav "Texto" && \
+${RUN_PREFIX} spanish-tts say -v carlos_mx -o /tmp/out.wav "Texto" && \
   ffmpeg -y -i /tmp/out.wav -af loudnorm=I=-16:TP=-1.5:LRA=11 -acodec libmp3lame -b:a 192k /tmp/out.mp3
 ```
 
 For Telegram voice bubbles (Opus-in-OGG):
 ```bash
-conda run -n qwen3-tts spanish-tts say -v carlos_mx -o /tmp/out.wav "Texto" && \
+${RUN_PREFIX} spanish-tts say -v carlos_mx -o /tmp/out.wav "Texto" && \
   ffmpeg -y -i /tmp/out.wav -af loudnorm=I=-16:TP=-1.5:LRA=11 -c:a libopus -b:a 64k /tmp/out.ogg
 ```
 
@@ -79,7 +87,7 @@ conda run -n qwen3-tts spanish-tts say -v carlos_mx -o /tmp/out.wav "Texto" && \
 
 - **Default (male)**: `carlos_mx` — Mexican Spanish, most tested
 - **Female voice**: `lucia_es` — use when the user says "voz femenina" or context implies female
-- **List all voices**: `conda run -n qwen3-tts spanish-tts list`
+- **List all voices**: `${RUN_PREFIX} spanish-tts list`
 - For one-off voice changes, pass `-v <voice_name>` in the terminal() command
 
 ### For non-Spanish languages
@@ -87,20 +95,20 @@ conda run -n qwen3-tts spanish-tts say -v carlos_mx -o /tmp/out.wav "Texto" && \
 Use the bundled MLX script directly (the `spanish-tts` CLI is Spanish-only):
 
 ```bash
-conda run -n qwen3-tts python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Hello world!" \
+${RUN_PREFIX} python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Hello world!" \
   --speaker Ryan --language English -o /tmp/english.wav
 ```
 
 To convert WAV to MP3:
 ```bash
-conda run -n qwen3-tts python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Hello world!" \
+${RUN_PREFIX} python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Hello world!" \
   --speaker Ryan --language English -o /tmp/out.wav && \
   ffmpeg -y -i /tmp/out.wav -af loudnorm=I=-16:TP=-1.5:LRA=11 -acodec libmp3lame -b:a 192k /tmp/out.mp3
 ```
 
 For Telegram voice bubbles (Opus-in-OGG):
 ```bash
-conda run -n qwen3-tts python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Hello world!" \
+${RUN_PREFIX} python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Hello world!" \
   --speaker Ryan --language English -o /tmp/out.wav && \
   ffmpeg -y -i /tmp/out.wav -af loudnorm=I=-16:TP=-1.5:LRA=11 -c:a libopus -b:a 64k /tmp/out.ogg
 ```
@@ -112,7 +120,7 @@ Script path: `${HERMES_SKILL_DIR}/scripts/tts_mlx.py` (resolved automatically wh
 ### TTS command produces no output or wrong voice
 
 1. Check conda env exists: `conda env list | grep qwen3-tts`
-2. Test CLI directly: `conda run -n qwen3-tts spanish-tts say -v carlos_mx -o /tmp/test.wav "Hola mundo"`
+2. Test CLI directly: `${RUN_PREFIX} spanish-tts say -v carlos_mx -o /tmp/test.wav "Hola mundo"`
 3. Check the WAV: `file /tmp/test.wav` — should show `RIFF ... WAVE audio`
 4. If `conda run` fails, check conda version: `conda --version` (25.x removed `--no-banner` — see pitfall 4)
 
@@ -161,6 +169,9 @@ mcp_servers:
   spanish-tts:
     command: ["conda", "run", "-n", "qwen3-tts", "python", "-m", "spanish_tts.mcp_server"]
 ```
+
+> For non-conda environments, adjust the `command` array to point to your
+> environment's Python, e.g.: `["/path/to/venv/bin/python", "-m", "spanish_tts.mcp_server"]`
 
 ### Verify
 
@@ -342,7 +353,7 @@ The `--language` flag controls the **output** language, not the reference langua
 
 Example -- clone a Korean speaker's voice, output in Spanish:
 ```bash
-conda run -n qwen3-tts python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py \
+${RUN_PREFIX} python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py \
   "Hola, esto es una prueba de clonacion." \
   --mode voice-clone \
   --ref-audio /path/to/korean_speaker.wav \
@@ -439,7 +450,7 @@ first-inference warmup, deprecated CLI, harmless warnings, cloning tips, dataset
 
 Manual smoke test (requires completed setup):
 ```bash
-conda run -n qwen3-tts python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py \
+${RUN_PREFIX} python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py \
   "Hello, this is a test." --speaker Ryan --language English \
   -o /tmp/qwen3_tts_verify.wav && afplay /tmp/qwen3_tts_verify.wav
 ```
