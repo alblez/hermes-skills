@@ -14,7 +14,7 @@
 set -euo pipefail
 
 # ── Defaults ─────────────────────────────────────────────────────────
-SPANISH_TTS_PATH="${HOME}/Code/spanish-tts"
+SPANISH_TTS_PATH="${HOME}/.qwen3-tts-spanish-voices"
 HERMES_HOME="${HOME}/.hermes"
 SKIP_MCP=false
 SKIP_BREW=false
@@ -46,7 +46,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: bash install.sh [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --spanish-tts-path PATH  Path to spanish-tts repo (default: ~/Code/spanish-tts)"
+            echo "  --spanish-tts-path PATH  Path to spanish-tts repo (default: ~/.qwen3-tts-spanish-voices)"
             echo "  --hermes-home PATH       Hermes config directory (default: ~/.hermes)"
             echo "  --skip-mcp              Skip MCP config.yaml modification"
             echo "  --skip-brew             Skip Homebrew installs (ffmpeg, sox)"

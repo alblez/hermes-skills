@@ -15,21 +15,16 @@ metadata:
     config:
       - key: qwen3-tts.spanish-tts-path
         description: "Path to the qwen3-tts-spanish-voices repository clone"
-        default: "~/Code/spanish-tts"
+        default: "~/.qwen3-tts-spanish-voices"
         prompt: "Spanish TTS repo path"
       - key: qwen3-tts.run-prefix
         description: "Command prefix to run tools in the TTS environment (conda run, venv path, etc.)"
         default: "conda run -n qwen3-tts"
         prompt: "Environment run prefix (e.g., 'conda run -n qwen3-tts' or '/path/to/venv/bin/')"
-required_environment_variables:
-  - name: QWEN_TTS_OUTPUT_DIR
-    prompt: "Output directory for generated audio files"
-    help: "Defaults to ~/tts-output/ if not set"
-    required_for: "custom output directory (optional)"
-  - name: QWEN_TTS_MODEL
-    prompt: "HuggingFace model ID override"
-    help: "Defaults to the recommended 8-bit MLX model for each mode"
-    required_for: "model override (optional)"
+required_environment_variables: []
+# Optional env vars (both have defaults, do NOT list as required):
+#   QWEN_TTS_OUTPUT_DIR — defaults to ~/tts-output/
+#   QWEN_TTS_MODEL — defaults to recommended 8-bit MLX model per mode
 ---
 
 # Qwen3-TTS Local Inference
@@ -159,7 +154,7 @@ The agent's primary workflow is covered in the Quick Reference above.
 
 ```bash
 conda activate qwen3-tts
-cd ~/Code/spanish-tts   # or the path configured in qwen3-tts.spanish-tts-path
+cd ~/.qwen3-tts-spanish-voices   # or the path configured in qwen3-tts.spanish-tts-path
 pip install -e ".[mlx,mcp]"
 ```
 
@@ -382,7 +377,7 @@ provides a CLI for Spanish TTS with curated voices (Creative Commons, VoxForge).
 
 ```bash
 conda activate qwen3-tts
-cd ~/Code/spanish-tts   # or the path configured in qwen3-tts.spanish-tts-path
+cd ~/.qwen3-tts-spanish-voices   # or the path configured in qwen3-tts.spanish-tts-path
 pip install -e ".[mlx]"
 ```
 
@@ -424,7 +419,8 @@ Voice registry: `~/.spanish-tts/voices.yaml`. Reference audio: `~/.spanish-tts/r
 - 0.6B models are ~3x faster than 1.7B with some quality tradeoff
 - First run on MPS/MLX is slower due to kernel compilation (29% improvement by run 3)
 - Each `conda run` call spawns a new process, reloading the model (~5-15s overhead).
-  Expect 20-40s total per TTS call on M1/M2, 15-25s on M3/M4 Max.
+  Expect 8-16s total per TTS call on M-series Max, 15-25s on M1/M2 base.
+  With MCP server (model stays loaded): 2-5s per call.
 
 ## Pitfalls
 
@@ -449,8 +445,13 @@ Voice registry: `~/.spanish-tts/voices.yaml`. Reference audio: `~/.spanish-tts/r
 
 ### Informational
 
-See `references/pitfalls_informational.md` for lower-severity notes (sox install,
-first-inference warmup, deprecated CLI, harmless warnings, cloning tips, datasets torchcodec).
+14. **Harmless Mistral regex warning** — Every generation prints `"incorrect regex pattern... fix_mistral_regex=True"`. This is a tokenizer compatibility notice from HuggingFace, not a real error. Ignore it.
+15. **Model type mismatch warning** — Every generation prints `"model of type qwen3_tts to instantiate a model of type ''"`. Harmless HuggingFace warning. Ignore it.
+16. **Empty text silently generates audio** — The `spanish-tts` CLI does not validate empty input. Passing `""` produces a ~0.8s WAV of silence/noise. The MCP server validates and rejects empty text.
+17. **"Fetching N files" progress bar on cached models** — Appears on every run even when the model is already downloaded. HuggingFace Hub checking for updates. Harmless but noisy.
+
+See `references/pitfalls_informational.md` for additional lower-severity notes (sox install,
+first-inference warmup, deprecated CLI, cloning tips, datasets torchcodec).
 
 ## Verification
 
