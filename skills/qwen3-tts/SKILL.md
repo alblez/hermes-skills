@@ -91,6 +91,20 @@ conda run -n qwen3-tts python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Hello worl
   --speaker Ryan --language English -o /tmp/english.wav
 ```
 
+To convert WAV to MP3:
+```bash
+conda run -n qwen3-tts python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Hello world!" \
+  --speaker Ryan --language English -o /tmp/out.wav && \
+  ffmpeg -y -i /tmp/out.wav -af loudnorm=I=-16:TP=-1.5:LRA=11 -acodec libmp3lame -b:a 192k /tmp/out.mp3
+```
+
+For Telegram voice bubbles (Opus-in-OGG):
+```bash
+conda run -n qwen3-tts python ${HERMES_SKILL_DIR}/scripts/tts_mlx.py "Hello world!" \
+  --speaker Ryan --language English -o /tmp/out.wav && \
+  ffmpeg -y -i /tmp/out.wav -af loudnorm=I=-16:TP=-1.5:LRA=11 -c:a libopus -b:a 64k /tmp/out.ogg
+```
+
 Script path: `${HERMES_SKILL_DIR}/scripts/tts_mlx.py` (resolved automatically when the skill loads).
 
 ## Troubleshooting
@@ -190,6 +204,15 @@ full implementation plan and server source code.
 - See `references/pytorch_mps_example.md` for code example
 
 ## Step 1: Environment Setup
+
+**Quick setup** (recommended): Run the bundled install script:
+```bash
+bash ${HERMES_SKILL_DIR}/scripts/install.sh
+```
+This creates the conda env, installs all dependencies, sets up the spanish-tts
+CLI, and configures the MCP server. Run `bash ${HERMES_SKILL_DIR}/scripts/install.sh --help` for options.
+
+**Manual setup** (if you prefer step-by-step):
 
 ### MLX Approach (Apple Silicon)
 
