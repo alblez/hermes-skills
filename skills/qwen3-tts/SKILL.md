@@ -63,6 +63,12 @@ mcp_spanish-tts_say(text="Texto en español", voice="carlos_mx")
 The tool returns `{ "path": "/path/to/output.wav", "duration_seconds": 3.2 }`.
 Convert the WAV for delivery as needed (MP3, OGG for Telegram).
 
+For long texts (>50 words), pass `stream=True` for lower memory usage:
+```
+mcp_spanish-tts_say(text="Long text here...", voice="carlos_mx", stream=True)
+```
+Output format is identical. Streaming uses incremental decoding internally.
+
 ### Fallback: terminal()
 
 If the MCP server is not running, use `terminal()` directly:

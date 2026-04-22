@@ -52,6 +52,36 @@ sf.write("out.wav", audio_np, model.sample_rate)
 
 ## Not Yet Documented in This Skill
 
-- **Streaming**: `stream=True` parameter on `generate()`, `generate_custom_voice()`, `generate_voice_design()`
 - **Batch generation**: `model.batch_generate(texts=[...])` for parallel synthesis
 - **Additional quantizations**: mlx-community hosts 5-bit, 6-bit, and bf16 variants beyond 4/8-bit
+
+## Streaming
+
+All generate methods support `stream=True` for incremental decoding:
+
+```python
+# Streaming — yields ~2-second audio chunks as they generate
+for chunk in model.generate(text="Long text...", lang_code="english", stream=True):
+    audio = np.array(chunk.audio)
+    print(f"Chunk: {chunk.samples} samples, final={chunk.is_final_chunk}")
+
+# Also works with custom voice and voice design:
+for chunk in model.generate_custom_voice(text="...", speaker="Ryan", language="english", stream=True):
+    ...
+for chunk in model.generate_voice_design(text="...", instruct="...", language="english", stream=True):
+    ...
+```
+
+Parameters:
+- `stream: bool = False` — enable streaming decode
+- `streaming_interval: float = 2.0` — seconds of audio per chunk (25 codec tokens at 12.5 Hz)
+
+Each chunk is a `GenerationResult` with:
+- `audio` — `mx.array` float32, 24kHz sample rate
+- `samples` — number of samples in this chunk (~48,000 for 2.0s interval)
+- `is_streaming_chunk` — `True` for streaming chunks
+- `is_final_chunk` — `True` for the last chunk of a segment
+
+The streaming decoder uses stateful `streaming_step()` with conv buffers and
+transformer KV cache — it processes only new tokens incrementally, not re-decoding
+from scratch. Memory stays flat regardless of text length.
