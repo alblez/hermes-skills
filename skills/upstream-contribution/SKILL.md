@@ -16,6 +16,7 @@ required_environment_variables:
     prompt: "GitHub personal access token"
     help: "Classic token with public_repo scope. Fine-grained tokens scoped to your repos only will FAIL on external repos (403). Create one at https://github.com/settings/tokens"
     required_for: "forking upstream repos, opening PRs, scanning repos"
+metadata.hermes.tags: []
 ---
 
 # Upstream OSS Contribution

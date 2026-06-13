@@ -25,6 +25,7 @@ required_environment_variables: []
 # Optional env vars (both have defaults, do NOT list as required):
 #   QWEN_TTS_OUTPUT_DIR — defaults to ~/tts-output/
 #   QWEN_TTS_MODEL — defaults to recommended 8-bit MLX model per mode
+metadata.hermes.tags: []
 ---
 
 # Qwen3-TTS Local Inference
