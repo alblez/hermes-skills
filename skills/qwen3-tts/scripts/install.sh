@@ -155,7 +155,7 @@ fi
 step "Step 6: spanish-tts package"
 
 info "Installing spanish-tts with [mlx,mcp] extras..."
-conda run -n "$CONDA_ENV" pip install -e "$SPANISH_TTS_PATH[mlx,mcp]"
+conda run -n "$CONDA_ENV" pip install -e "${SPANISH_TTS_PATH}[mlx,mcp]"
 info "spanish-tts installed"
 
 # ── Step 7: MCP config ──────────────────────────────────────────────
