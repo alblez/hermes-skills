@@ -4,9 +4,11 @@ on:
   push:
     paths:
       - 'skills/qwen3-tts/**'
+      - '.github/workflows/qwen3-tts-ci.yml'
   pull_request:
     paths:
       - 'skills/qwen3-tts/**'
+      - '.github/workflows/qwen3-tts-ci.yml'
   schedule:
     # Weekly — catch upstream dep breakage (mlx-audio, mlx-lm, transformers)
     - cron: '0 9 * * 1'  # Monday 09:00 UTC
@@ -52,7 +54,8 @@ jobs:
       - name: SKILL.md — no broken template vars
         run: |
           # Ensure ${HERMES_SKILL_DIR} is used, not hardcoded paths
-          if grep -q '~/.hermes/skills/qwen3-tts' SKILL.md; then
+          hardcoded_path=$(printf '\176/.hermes/skills/qwen3-tts')
+          if grep -q "$hardcoded_path" SKILL.md; then
             echo "FAIL: Found hardcoded ~/.hermes/skills/qwen3-tts path"
             exit 1
           fi
@@ -82,10 +85,27 @@ jobs:
           python-version: '3.12'
 
       - name: Check requirements.txt is parseable
-        run: pip install --dry-run -r requirements.txt 2>&1 | tail -5 || true
-        # MLX packages won't install on Linux (needs Metal), but pip --dry-run
-        # validates the version specifiers are syntactically correct.
-        # Failure here means a malformed pin, not a missing platform package.
+        run: |
+          pip install -q packaging
+          python - <<'PY'
+          from pathlib import Path
+
+          from packaging.requirements import InvalidRequirement, Requirement
+
+          for line_number, raw_line in enumerate(
+              Path("requirements.txt").read_text().splitlines(), start=1
+          ):
+              requirement = raw_line.strip()
+              if not requirement or requirement.startswith("#"):
+                  continue
+              try:
+                  Requirement(requirement)
+              except InvalidRequirement as error:
+                  raise SystemExit(
+                      f"requirements.txt:{line_number}: {error}"
+                  ) from error
+          print("OK: requirements.txt specifiers are valid")
+          PY
 
       - name: Check for qwen-tts conflict markers
         run: |
